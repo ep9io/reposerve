@@ -4,7 +4,9 @@ Every change that a reader can see is listed here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses
 [semantic versioning](https://semver.org/spec/v2.0.0.html).
 
-## 0.1.0 - 25 November 2026
+## [Unreleased]
+
+## [0.1.0] - 25 November 2026
 
 The first release. It serves one directory to a browser on the local network.
 
