@@ -2,33 +2,41 @@
 name        = "reposerve"
 version     = "0.1.0"
 edition     = "2021"
-rust-version = "1.80"
-authors     = ["ep9"]
+rust-version = "1.91"
+authors     = ["Tristan Everitt <tristan.ecwhz@9epochs.com>"]
 description = "Serve a repository's Markdown, source files and notebooks to a browser on the local network"
 license     = "MIT"
+repository  = "https://github.com/ep9io/reposerve"
+homepage    = "https://github.com/ep9io/reposerve"
 readme        = "README.md"
 documentation = "https://docs.rs/reposerve"
 keywords    = ["markdown", "documentation", "server", "browser", "notebook"]
 categories  = ["command-line-utilities", "web-programming::http-server"]
-exclude     = [".github/*", "tests/fixtures/*"]
+exclude     = [".github/*"]
 
 [dependencies]
+ammonia          = "4"
 axum             = "0.8"
 clap             = { version = "4", features = ["derive"] }
-flate2           = "1"
+notify           = "8"
+open             = "5"
 percent-encoding = "2"
 pulldown-cmark   = { version = "0.13", default-features = false, features = ["html"] }
 serde            = { version = "1", features = ["derive"] }
 serde_json       = "1"
-syntect          = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "html", "parsing", "regex-onig"] }
+syntect          = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "html", "parsing", "regex-fancy"] }
 thiserror        = "2"
 tokio            = { version = "1", features = ["full"] }
 tokio-stream     = { version = "0.1", features = ["sync"] }
 toml             = "1"
-two-face         = "0.5"
+tower-http       = { version = "0.6", features = ["compression-gzip"] }
+two-face         = { version = "0.5", default-features = false, features = ["syntect-default-fancy"] }
 
 [dev-dependencies]
+http-body-util = "0.1"
 tempfile = "3"
+tower = { version = "0.5", features = ["util"] }
+
 
 [[bin]]
 name = "reposerve"
@@ -43,3 +51,9 @@ fallible_impl_from = "deny"
 unneeded_field_pattern = "deny"
 fn_params_excessive_bools = "deny"
 must_use_candidate = "deny"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+

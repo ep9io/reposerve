@@ -44,6 +44,30 @@ struct Cli {
     #[arg(long, value_name = "LIST")]
     include: Option<String>,
 
+    /// The colour scheme a first visit starts with: `auto`, `light` or `dark`.
+    #[arg(long, value_name = "MODE")]
+    theme: Option<String>,
+
+    /// The width of the reading column, in `rem`.
+    #[arg(long, value_name = "REM")]
+    reading_width: Option<u16>,
+
+    /// Do not render math.
+    #[arg(long)]
+    no_math: bool,
+
+    /// Do not show the table of contents.
+    #[arg(long)]
+    no_toc: bool,
+
+    /// Show entries whose name starts with a dot.
+    #[arg(long)]
+    hidden: bool,
+
+    /// Open a browser once the server is listening.
+    #[arg(long)]
+    open: bool,
+
     /// Read settings from this TOML file.
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
@@ -71,11 +95,14 @@ async fn main() -> ExitCode {
 async fn run() -> Result<(), Error> {
     let cli = Cli::parse();
 
-    let mut config = match &cli.config {
-        Some(path) => Config::read_file(path)?,
-        None => Config::default(),
+    // A configuration file in the root is read when no other file is named.
+    let root = cli.root.clone().unwrap_or_else(|| PathBuf::from("."));
+    let base = match &cli.config {
+        Some(path) => Some(Config::read_file(path)?),
+        None => Config::discover(&root)?,
     };
-    config = config.with_overrides(Overrides {
+
+    let config = base.unwrap_or_default().with_overrides(Overrides {
         root: cli.root,
         bind: cli.bind,
         port: cli.port,
@@ -84,7 +111,13 @@ async fn run() -> Result<(), Error> {
         live_reload: cli.no_live_reload.then_some(false),
         extensions: cli.extensions,
         include: cli.include,
-    });
+        theme: cli.theme,
+        reading_width: cli.reading_width,
+        math: cli.no_math.then_some(false),
+        toc: cli.no_toc.then_some(false),
+        hidden: cli.hidden.then_some(true),
+        open: cli.open.then_some(true),
+    })?;
     config.validate()?;
 
     if cli.show_config {
@@ -93,6 +126,13 @@ async fn run() -> Result<(), Error> {
     }
 
     let server = Server::bind(config).await?;
-    server.report();
+    let urls = server.report();
+    if server.wants_browser() {
+        if let Some(url) = urls.first() {
+            if let Err(error) = open::that(url) {
+                eprintln!("warning: cannot open a browser: {error}");
+            }
+        }
+    }
     server.serve().await
 }

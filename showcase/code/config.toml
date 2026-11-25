@@ -1,0 +1,18 @@
+# A configuration file, to show TOML colouring. These keys are real.
+
+root = "./showcase"
+bind = "0.0.0.0"
+port = 8095
+title = "showcase"
+token = ""
+live_reload = true
+theme = "auto"
+reading_width = 46
+math = true
+toc = true
+open = false
+
+extensions = ["md", "txt"]
+include = ["markdown", "notebooks"]
+assets = ["svg", "png"]
+presets = ["md", "txt", "rs", "py", "ipynb"]

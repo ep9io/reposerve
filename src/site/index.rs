@@ -1,4 +1,4 @@
-//! The set of files the server may serve, and the directory tree built from it.
+//! The set of files the server may serve, and the tree built over a subset.
 //!
 //! The list comes from Git, never from a directory walk:
 //! `git ls-files -z --cached --others --exclude-standard` names every tracked
@@ -6,6 +6,10 @@
 //! `target/`, generated output and machine-local files such as `.env/local` out
 //! of the server, and it makes path traversal impossible: a request is answered
 //! only when its path is a key in this set.
+//!
+//! [`RepoIndex`] holds every path and does not depend on the file-type filter.
+//! [`Listing`] applies the filter and builds the tree. The index is therefore
+//! cheap to cache across requests, whatever filter each reader chooses.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
@@ -14,22 +18,21 @@ use std::process::Command;
 use crate::config::Config;
 use crate::error::Error;
 
+/// The value stored in the filter cookie when the reader wants no file shown.
+///
+/// A single dot cannot be an extension, so `parse` drops it and the set stays
+/// empty. An empty cookie value would be a deleted cookie in some browsers.
+const NONE_VALUE: &str = ".";
+
 /// The file extensions the server shows.
 ///
-/// The default is `md` alone, so the site opens as a documentation reader. A
-/// reader widens it to see source or images. A file with no extension never
-/// matches.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// A file with no extension never matches. An empty set shows nothing, which is
+/// a choice a reader can make on the filter form.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Extensions(BTreeSet<String>);
 
-impl Default for Extensions {
-    fn default() -> Self {
-        Self(BTreeSet::from(["md".to_string()]))
-    }
-}
-
 impl Extensions {
-    /// Reads a comma or space separated list. An empty list means the default.
+    /// Reads a comma or space separated list. An empty list means nothing shown.
     #[must_use]
     pub fn parse(value: &str) -> Self {
         let mut set = BTreeSet::new();
@@ -47,29 +50,45 @@ impl Extensions {
                 set.insert(token);
             }
         }
-        if set.is_empty() {
-            Self::default()
-        } else {
-            Self(set)
-        }
+        Self(set)
     }
 
     /// The list as it is stored in the cookie, without spaces.
     #[must_use]
     pub fn value(&self) -> String {
-        self.0.iter().cloned().collect::<Vec<_>>().join(",")
+        if self.0.is_empty() {
+            NONE_VALUE.to_string()
+        } else {
+            self.0.iter().cloned().collect::<Vec<_>>().join(",")
+        }
     }
 
     /// The list as it is shown to a reader.
     #[must_use]
     pub fn label(&self) -> String {
-        self.0.iter().cloned().collect::<Vec<_>>().join(", ")
+        if self.0.is_empty() {
+            "no file type".to_string()
+        } else {
+            self.0.iter().cloned().collect::<Vec<_>>().join(", ")
+        }
     }
 
     /// Whether one extension is shown.
     #[must_use]
     pub fn contains(&self, extension: &str) -> bool {
         self.0.contains(extension)
+    }
+
+    /// Whether the filter shows no file at all.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// The number of file types the filter shows.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.0.len()
     }
 
     /// The entries that are not one of the advertised extensions.
@@ -164,7 +183,7 @@ fn git_listing(root: &Path) -> Result<BTreeSet<String>, Error> {
 /// # Errors
 ///
 /// Fails when a directory cannot be read.
-fn walk_listing(root: &Path) -> Result<BTreeSet<String>, Error> {
+fn walk_listing(root: &Path, hidden: bool) -> Result<BTreeSet<String>, Error> {
     let mut files = BTreeSet::new();
     let mut pending = vec![root.to_path_buf()];
     while let Some(directory) = pending.pop() {
@@ -182,14 +201,16 @@ fn walk_listing(root: &Path) -> Result<BTreeSet<String>, Error> {
                 source,
             })?;
             let name = entry.file_name().to_string_lossy().into_owned();
-            // A dot entry is a tool's own state or a secret, never a document.
-            if name.starts_with('.') {
+            // A tool keeps its own state in a dot directory. Even a reader who
+            // asks for hidden entries does not want `.git` in the tree.
+            if WALK_SKIP.contains(&name.as_str()) {
+                continue;
+            }
+            if name.starts_with('.') && !hidden {
                 continue;
             }
             if file_type.is_dir() {
-                if !WALK_SKIP.contains(&name.as_str()) {
-                    pending.push(entry.path());
-                }
+                pending.push(entry.path());
             } else if file_type.is_file() {
                 if let Ok(relative) = entry.path().strip_prefix(root) {
                     files.insert(relative.to_string_lossy().replace('\\', "/"));
@@ -198,6 +219,17 @@ fn walk_listing(root: &Path) -> Result<BTreeSet<String>, Error> {
         }
     }
     Ok(files)
+}
+
+/// Removes every path that holds a component starting with a dot.
+///
+/// `git ls-files` lists a tracked `.gitignore` and a tracked `.github/`, while a
+/// plain walk has to choose. This function applies the choice to both.
+fn without_hidden(paths: BTreeSet<String>) -> BTreeSet<String> {
+    paths
+        .into_iter()
+        .filter(|path| !path.split('/').any(|part| part.starts_with('.')))
+        .collect()
 }
 
 /// Whether `path` sits under one of the included prefixes. An empty list
@@ -209,19 +241,17 @@ fn included(path: &str, include: &[String]) -> bool {
             .any(|prefix| path == prefix || path.starts_with(&format!("{prefix}/")))
 }
 
-/// The repository content, as one sorted set of paths plus the tree over them.
+/// Everything the server may read: every path, split into documents and assets.
 #[derive(Debug)]
 pub struct RepoIndex {
     root: PathBuf,
     canonical_root: PathBuf,
     all: BTreeSet<String>,
-    files: BTreeSet<String>,
     assets: BTreeSet<String>,
-    tree: TreeNode,
 }
 
 impl RepoIndex {
-    /// Reads the file list for the configured root and builds the tree.
+    /// Reads the file list for the configured root.
     ///
     /// The list comes from Git when the root is a working tree, so ignored and
     /// generated files stay out of the site. A plain directory is walked
@@ -232,38 +262,69 @@ impl RepoIndex {
     /// Fails when the root is not a directory, when Git lists it but the listing
     /// cannot be read, or when a plain directory cannot be walked.
     pub fn load(config: &Config) -> Result<Self, Error> {
-        let root = &config.root;
-        if !root.is_dir() {
+        if !config.root.is_dir() {
             return Err(Error::RootUnavailable {
-                path: root.to_path_buf(),
+                path: config.root.clone(),
             });
         }
-        let canonical_root = std::fs::canonicalize(root).map_err(|source| Error::Read {
-            path: root.to_path_buf(),
+        let canonical_root = std::fs::canonicalize(&config.root).map_err(|source| Error::Read {
+            path: config.root.clone(),
             source,
         })?;
 
-        let all: BTreeSet<String> = match git_listing(root) {
+        let all: BTreeSet<String> = match git_listing(&config.root) {
             Ok(paths) => paths,
-            Err(Error::GitUnavailable { .. } | Error::NotAWorkTree { .. }) => walk_listing(root)?,
+            Err(Error::GitUnavailable { .. } | Error::NotAWorkTree { .. }) => {
+                walk_listing(&config.root, config.hidden)?
+            }
             Err(other) => return Err(other),
         }
         .into_iter()
         .filter(|path| included(path, &config.include))
         .collect();
+        let all = if config.hidden {
+            all
+        } else {
+            without_hidden(all)
+        };
 
-        let files: BTreeSet<String> = all
-            .iter()
-            .filter(|path| config.extensions.matches(path))
-            .cloned()
-            .collect();
         let assets: BTreeSet<String> = all
             .iter()
             .filter(|path| is_asset(path, &config.assets))
             .cloned()
             .collect();
 
-        Ok(Self::from_paths(root, canonical_root, all, files, assets))
+        Ok(Self {
+            root: config.root.clone(),
+            canonical_root,
+            all,
+            assets,
+        })
+    }
+
+    /// Builds an index over an explicit path list. Used by the tests.
+    #[cfg(test)]
+    #[must_use]
+    pub fn from_listing(root: &Path, paths: &[&str], assets: &[String]) -> Self {
+        let canonical_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        let all: BTreeSet<String> = paths.iter().map(|path| (*path).to_string()).collect();
+        let assets: BTreeSet<String> = all
+            .iter()
+            .filter(|path| is_asset(path, assets))
+            .cloned()
+            .collect();
+        Self {
+            root: root.to_path_buf(),
+            canonical_root,
+            all,
+            assets,
+        }
+    }
+
+    /// The number of paths the index holds.
+    #[must_use]
+    pub fn total(&self) -> usize {
+        self.all.len()
     }
 
     /// Every path the index knows, whatever the filter shows.
@@ -271,70 +332,117 @@ impl RepoIndex {
         self.all.iter().map(String::as_str)
     }
 
-    /// Builds an index over an explicit path list. Used by the tests.
-    #[cfg(test)]
+    /// Whether the index names this path, as a document or an asset.
     #[must_use]
-    pub fn from_listing(
-        root: &Path,
-        paths: &[&str],
-        extensions: &Extensions,
-        assets: &[String],
-    ) -> Self {
-        let canonical_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
-        let files: BTreeSet<String> = paths
-            .iter()
-            .filter(|path| extensions.matches(path))
-            .map(|path| (*path).to_string())
-            .collect();
-        let assets: BTreeSet<String> = paths
-            .iter()
-            .filter(|path| is_asset(path, assets))
-            .map(|path| (*path).to_string())
-            .collect();
-        let all: BTreeSet<String> = paths.iter().map(|path| (*path).to_string()).collect();
-        Self::from_paths(root, canonical_root, all, files, assets)
+    pub fn contains(&self, path: &str) -> bool {
+        self.all.contains(path) || self.assets.contains(path)
     }
 
-    fn from_paths(
-        root: &Path,
-        canonical_root: PathBuf,
-        all: BTreeSet<String>,
-        files: BTreeSet<String>,
-        assets: BTreeSet<String>,
-    ) -> Self {
+    /// How many files the repository holds of each type.
+    ///
+    /// A file of a type that the current filter hides still counts, so the filter
+    /// form can offer every type the repository holds. A file with no extension
+    /// has no type and is not counted.
+    #[must_use]
+    pub fn type_counts(&self) -> BTreeMap<String, usize> {
+        let mut counts = BTreeMap::new();
+        for path in &self.all {
+            let name = path.rsplit('/').next().unwrap_or(path);
+            if let Some((_, extension)) = name.rsplit_once('.') {
+                *counts.entry(extension.to_ascii_lowercase()).or_insert(0) += 1;
+            }
+        }
+        counts
+    }
+
+    /// Applies a file-type filter and builds the tree over what is left.
+    #[must_use]
+    pub fn listing(&self, extensions: &Extensions) -> Listing<'_> {
+        let files: BTreeSet<String> = self
+            .all
+            .iter()
+            .filter(|path| extensions.matches(path))
+            .cloned()
+            .collect();
         let tree = build_tree(&files);
-        Self {
-            root: root.to_path_buf(),
-            canonical_root,
-            all,
+        Listing {
+            index: self,
             files,
-            assets,
             tree,
         }
     }
 
+    /// Reads one indexed file, refusing anything that resolves outside the root.
+    ///
+    /// # Errors
+    ///
+    /// Fails when the path is not indexed, or when the file cannot be read.
+    pub fn read(&self, path: &str) -> Result<Vec<u8>, Error> {
+        if !self.contains(path) {
+            return Err(Error::NotFound {
+                path: path.to_string(),
+            });
+        }
+        let absolute = self.root.join(path);
+        let resolved = std::fs::canonicalize(&absolute).map_err(|source| Error::Read {
+            path: absolute.clone(),
+            source,
+        })?;
+        if !resolved.starts_with(&self.canonical_root) {
+            // A symlink inside the tree that points outside it. The index lists the
+            // link, not its target, so the content is not repository content.
+            return Err(Error::NotFound {
+                path: path.to_string(),
+            });
+        }
+        std::fs::read(&resolved).map_err(|source| Error::Read {
+            path: absolute,
+            source,
+        })
+    }
+}
+
+/// The files one reader's filter shows, plus the tree over them.
+#[derive(Debug)]
+pub struct Listing<'a> {
+    index: &'a RepoIndex,
+    files: BTreeSet<String>,
+    tree: TreeNode,
+}
+
+impl Listing<'_> {
+    /// How many files the repository holds of each type, shown or not.
+    ///
+    /// The filter form offers every type here, so a reader can turn on a type
+    /// that the current filter hides.
+    #[must_use]
+    pub fn type_counts(&self) -> BTreeMap<String, usize> {
+        self.index.type_counts()
+    }
+}
+
+impl Listing<'_> {
     /// The whole tree, for the sidebar.
     #[must_use]
     pub fn tree(&self) -> &TreeNode {
         &self.tree
     }
 
-    /// The number of files the current filter shows.
+    /// The number of files the filter shows.
     #[must_use]
     pub fn len(&self) -> usize {
         self.files.len()
     }
 
-    /// Whether the current filter shows no file at all.
+    /// Every shown path, in order. Used by the quick-open palette.
+    pub fn paths(&self) -> impl Iterator<Item = &str> {
+        self.files.iter().map(String::as_str)
+    }
+
+    /// Whether the filter shows no file at all.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         self.files.is_empty()
-    }
-
-    /// The number of files the repository holds, whatever the filter shows.
-    #[must_use]
-    pub fn total(&self) -> usize {
-        self.all.len()
     }
 
     /// Whether `path` names a file the server may read.
@@ -343,10 +451,10 @@ impl RepoIndex {
     /// document embeds still loads. It stays out of the tree and the listings.
     #[must_use]
     pub fn has_file(&self, path: &str) -> bool {
-        self.files.contains(path) || self.assets.contains(path)
+        self.files.contains(path) || self.index.assets.contains(path)
     }
 
-    /// Whether `path` names a directory that holds at least one indexed file.
+    /// Whether `path` names a directory that holds at least one shown file.
     #[must_use]
     pub fn has_directory(&self, path: &str) -> bool {
         if path.is_empty() {
@@ -403,7 +511,7 @@ impl RepoIndex {
         }
     }
 
-    /// Returns the indexed paths that contain `needle`, case-insensitively.
+    /// The shown paths that contain `needle`, case-insensitively.
     #[must_use]
     pub fn search(&self, needle: &str) -> Vec<&str> {
         let needle = needle.trim().to_lowercase();
@@ -417,33 +525,71 @@ impl RepoIndex {
             .collect()
     }
 
-    /// Reads one indexed file, refusing anything that resolves outside the root.
+    /// The Markdown document a directory offers as its front page.
+    ///
+    /// A reader who opens `docs/` wants `docs/README.md`, not a list of names.
+    #[must_use]
+    pub fn front_page(&self, directory: &str) -> Option<String> {
+        let candidate = if directory.is_empty() {
+            "README.md".to_string()
+        } else {
+            format!("{directory}/README.md")
+        };
+        self.files.contains(&candidate).then_some(candidate)
+    }
+
+    /// The files before and after `path` in its own directory.
+    ///
+    /// The order is the order the tree shows, so `next` is the file below this
+    /// one in the sidebar.
+    #[must_use]
+    pub fn neighbours(&self, path: &str) -> (Option<&str>, Option<&str>) {
+        if !self.files.contains(path) {
+            return (None, None);
+        }
+        let (directory, name) = match path.rsplit_once('/') {
+            Some((directory, name)) => (directory, name),
+            None => ("", path),
+        };
+        let prefix = if directory.is_empty() {
+            String::new()
+        } else {
+            format!("{directory}/")
+        };
+        let mut previous = None;
+        let mut found = false;
+        for file in self.files.range(prefix.clone()..) {
+            let Some(rest) = file.strip_prefix(prefix.as_str()) else {
+                break;
+            };
+            if rest.contains('/') {
+                // Another directory, and a different neighbour.
+                continue;
+            }
+            if found {
+                return (previous, Some(file.as_str()));
+            }
+            if rest == name {
+                found = true;
+            } else {
+                previous = Some(file.as_str());
+            }
+        }
+        (previous, None)
+    }
+
+    /// Reads one shown file.
     ///
     /// # Errors
     ///
-    /// Fails when the path is not indexed, or when the file cannot be read.
+    /// Fails when the path is not shown, or when the file cannot be read.
     pub fn read(&self, path: &str) -> Result<Vec<u8>, Error> {
         if !self.has_file(path) {
             return Err(Error::NotFound {
                 path: path.to_string(),
             });
         }
-        let absolute = self.root.join(path);
-        let resolved = std::fs::canonicalize(&absolute).map_err(|source| Error::Read {
-            path: absolute.clone(),
-            source,
-        })?;
-        if !resolved.starts_with(&self.canonical_root) {
-            // A symlink inside the tree that points outside it. The index lists the
-            // link, not its target, so the content is not repository content.
-            return Err(Error::NotFound {
-                path: path.to_string(),
-            });
-        }
-        std::fs::read(&resolved).map_err(|source| Error::Read {
-            path: absolute,
-            source,
-        })
+        self.index.read(path)
     }
 }
 
@@ -565,35 +711,38 @@ mod tests {
             .collect()
     }
 
+    const PATHS: [&str; 5] = [
+        "README.md",
+        "docs/README.md",
+        "docs/guides/ui.md",
+        "docs/reference/config.md",
+        "work/2026-11-audit/notes.md",
+    ];
+
     fn index() -> RepoIndex {
-        RepoIndex::from_listing(
-            Path::new("."),
-            &[
-                "README.md",
-                "docs/README.md",
-                "docs/guides/ui.md",
-                "docs/reference/config.md",
-                "work/2026-11-audit/notes.md",
-            ],
-            &Extensions::default(),
-            &assets(),
-        )
+        RepoIndex::from_listing(Path::new("."), &PATHS, &assets())
+    }
+
+    fn markdown() -> Extensions {
+        Extensions::parse("md")
     }
 
     #[test]
     fn a_file_is_only_served_when_the_index_lists_it() {
         let index = index();
-        assert!(index.has_file("docs/README.md"));
-        assert!(!index.has_file("target/debug/reposerve"));
-        assert!(!index.has_file(".env/local"));
+        let listing = index.listing(&markdown());
+        assert!(listing.has_file("docs/README.md"));
+        assert!(!listing.has_file("target/debug/reposerve"));
+        assert!(!listing.has_file(".env/local"));
     }
 
     #[test]
-    fn a_directory_is_known_when_it_holds_an_indexed_file() {
+    fn a_directory_is_known_when_it_holds_a_shown_file() {
         let index = index();
-        assert!(index.has_directory("docs"));
-        assert!(index.has_directory(""));
-        assert!(!index.has_directory("docs/missing"));
+        let listing = index.listing(&markdown());
+        assert!(listing.has_directory("docs"));
+        assert!(listing.has_directory(""));
+        assert!(!listing.has_directory("docs/missing"));
     }
 
     #[test]
@@ -615,7 +764,8 @@ mod tests {
     #[test]
     fn the_tree_lists_directories_before_files() {
         let index = index();
-        let root = index.tree();
+        let listing = index.listing(&markdown());
+        let root = listing.tree();
         assert_eq!(root.dirs.len(), 2);
         assert_eq!(root.dirs[0].name, "docs");
         assert_eq!(root.files[0].0, "README.md");
@@ -626,7 +776,7 @@ mod tests {
 
     #[test]
     fn the_default_filter_shows_markdown_alone() {
-        let extensions = Extensions::default();
+        let extensions = Extensions::parse("md");
         assert_eq!(extensions.value(), "md");
         assert!(extensions.matches("docs/README.md"));
         assert!(!extensions.matches("crates/main.rs"));
@@ -641,7 +791,20 @@ mod tests {
         assert_eq!(extensions.custom(&presets()), "ts");
         assert!(extensions.matches("crates/shared/src/lib.RS"));
         assert!(!extensions.matches("docs/README.md.bak"));
-        assert_eq!(Extensions::parse(""), Extensions::default());
+    }
+
+    #[test]
+    fn an_empty_filter_shows_nothing_and_survives_a_cookie() {
+        let extensions = Extensions::parse("");
+        assert!(extensions.is_empty());
+        assert_eq!(extensions.label(), "no file type");
+        let stored = extensions.value();
+        assert_eq!(stored, NONE_VALUE, "an empty cookie value can be dropped");
+        assert_eq!(
+            Extensions::parse(&stored),
+            extensions,
+            "the stored value parses back to nothing"
+        );
     }
 
     #[test]
@@ -649,12 +812,12 @@ mod tests {
         let index = RepoIndex::from_listing(
             Path::new("."),
             &["README.md", "logo.png", "crates/main.rs"],
-            &Extensions::parse("png"),
             &assets(),
         );
-        assert_eq!(index.len(), 1);
-        assert!(index.has_file("logo.png"));
-        assert!(!index.has_directory("crates"));
+        let listing = index.listing(&Extensions::parse("png"));
+        assert_eq!(listing.len(), 1);
+        assert!(listing.has_file("logo.png"));
+        assert!(!listing.has_directory("crates"));
     }
 
     #[test]
@@ -662,10 +825,10 @@ mod tests {
         let index = RepoIndex::from_listing(
             Path::new("."),
             &["a/b/c/one.md", "a/b/c/two.md", "a/README.md"],
-            &Extensions::default(),
             &assets(),
         );
-        let root = index.tree();
+        let listing = index.listing(&markdown());
+        let root = listing.tree();
         let a = &root.dirs[0];
         assert_eq!(a.name, "a");
         let chain = &a.dirs[0];
@@ -676,23 +839,20 @@ mod tests {
 
     #[test]
     fn a_directory_that_cannot_be_skipped_is_its_own_target() {
-        let index = RepoIndex::from_listing(
-            Path::new("."),
-            &["a/b/c/one.md", "a/README.md"],
-            &Extensions::default(),
-            &assets(),
-        );
-        assert_eq!(index.collapsed_directory("a"), Some("a".to_string()));
+        let index =
+            RepoIndex::from_listing(Path::new("."), &["a/b/c/one.md", "a/README.md"], &assets());
+        let listing = index.listing(&markdown());
+        assert_eq!(listing.collapsed_directory("a"), Some("a".to_string()));
         assert_eq!(
-            index.collapsed_directory("a/b"),
+            listing.collapsed_directory("a/b"),
             Some("a/b/c".to_string()),
             "a path that a reader typed still lands on the deepest directory"
         );
         assert_eq!(
-            index.collapsed_directory("a/b/c"),
+            listing.collapsed_directory("a/b/c"),
             Some("a/b/c".to_string())
         );
-        assert_eq!(index.collapsed_directory("missing"), None);
+        assert_eq!(listing.collapsed_directory("missing"), None);
     }
 
     #[test]
@@ -700,24 +860,79 @@ mod tests {
         let index = RepoIndex::from_listing(
             Path::new("."),
             &["docs/README.md", "docs/ui/sign-in.webp"],
-            &Extensions::default(),
             &assets(),
         );
+        let listing = index.listing(&markdown());
         assert!(
-            index.has_file("docs/ui/sign-in.webp"),
+            listing.has_file("docs/ui/sign-in.webp"),
             "the image still loads"
         );
         assert!(
-            !index.has_directory("docs/ui"),
+            !listing.has_directory("docs/ui"),
             "but its directory is not listed"
         );
-        assert!(index.has_file("docs/README.md"));
+        assert!(listing.has_file("docs/README.md"));
     }
 
     #[test]
     fn search_matches_any_part_of_a_path() {
         let index = index();
-        assert_eq!(index.search("GUIDES"), vec!["docs/guides/ui.md"]);
-        assert!(index.search("   ").is_empty());
+        let listing = index.listing(&markdown());
+        assert_eq!(listing.search("GUIDES"), vec!["docs/guides/ui.md"]);
+        assert!(listing.search("   ").is_empty());
+    }
+
+    #[test]
+    fn a_hidden_entry_is_left_out_unless_it_is_asked_for() {
+        let paths: BTreeSet<String> = [
+            "README.md",
+            ".gitignore",
+            ".github/workflows/check.yml",
+            "docs/.notes.md",
+        ]
+        .iter()
+        .map(|path| (*path).to_string())
+        .collect();
+        let kept = without_hidden(paths);
+        assert_eq!(kept.into_iter().collect::<Vec<String>>(), vec!["README.md"]);
+    }
+
+    #[test]
+    fn a_directory_front_page_is_its_readme() {
+        let index = index();
+        let listing = index.listing(&markdown());
+        assert_eq!(listing.front_page(""), Some("README.md".to_string()));
+        assert_eq!(
+            listing.front_page("docs"),
+            Some("docs/README.md".to_string())
+        );
+        assert_eq!(listing.front_page("work"), None);
+    }
+
+    #[test]
+    fn the_files_before_and_after_are_in_tree_order() {
+        let index = RepoIndex::from_listing(
+            Path::new("."),
+            &["a/one.md", "a/two.md", "a/three.md", "b/four.md"],
+            &assets(),
+        );
+        let listing = index.listing(&markdown());
+        // The index sorts by path bytes, so `one` comes before `three`.
+        assert_eq!(listing.neighbours("a/one.md"), (None, Some("a/three.md")));
+        assert_eq!(
+            listing.neighbours("a/three.md"),
+            (Some("a/one.md"), Some("a/two.md"))
+        );
+        assert_eq!(listing.neighbours("a/two.md"), (Some("a/three.md"), None));
+        assert_eq!(
+            listing.neighbours("b/four.md"),
+            (None, None),
+            "a directory with one file has no neighbours"
+        );
+        assert_eq!(
+            listing.neighbours("a/missing.md"),
+            (None, None),
+            "a path that is not shown has no neighbours"
+        );
     }
 }

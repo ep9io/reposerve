@@ -7,9 +7,9 @@
 default:
     @just --list
 
-# Serve the current directory.
+# Serve the sample repository.
 serve *args:
-    cargo run --release -- {{args}}
+    cargo run --release -- -c config/reposerve.toml {{args}}
 
 # Format the code.
 fmt:

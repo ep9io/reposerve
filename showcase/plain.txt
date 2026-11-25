@@ -1,0 +1,12 @@
+A plain text file.
+
+This page is shown as text, with line numbers, because the extension is not one
+the renderer knows. It is the same view a source file gets.
+
+    1. Indentation is kept as written.
+    2. So is    the run of spaces in this line.
+    3. And tabs, if a file holds them.
+
+Nothing here is highlighted, and nothing is rendered. That is the point.
+
+Version 1.0

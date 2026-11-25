@@ -1,0 +1,29 @@
+{
+  "site": {
+    "title": "showcase",
+    "port": 8095,
+    "theme": "auto"
+  },
+  "files": [
+    {
+      "path": "markdown/prose.md",
+      "lines": 126,
+      "kind": "markdown"
+    },
+    {
+      "path": "code/lib.rs",
+      "lines": 43,
+      "kind": "rust"
+    },
+    {
+      "path": "notebooks/analysis.ipynb",
+      "lines": null,
+      "kind": "notebook"
+    }
+  ],
+  "counts": {
+    "markdown": 2,
+    "code": 6,
+    "notebook": 1
+  }
+}

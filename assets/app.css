@@ -1,0 +1,1810 @@
+/* reposerve: one stylesheet for every page.
+ *
+ * Colours are named tokens, so a palette change happens in one place. The
+ * accents are blue and amber, which stay apart for the common forms of colour
+ * blindness. No state is shown by colour alone: links are underlined in prose,
+ * the current page carries an attribute, and every warning keeps its word.
+ */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --step-0: 1rem;
+  --step-1: 1.14rem;
+  --step-2: 1.3rem;
+  --step-3: 1.55rem;
+  --step-4: 1.9rem;
+
+  --radius: 0.6rem;
+  --radius-sm: 0.4rem;
+  --measure: 46rem;
+  --bar: 3.4rem;
+}
+
+:root,
+:root[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f7f8fa;
+  --surface-2: #eef1f5;
+  --fg: #16181d;
+  --muted: #5a6270;
+  --line: #e0e4ea;
+  --accent: #1a56b8;
+  --accent-soft: #e9f0fd;
+  --code-bg: #f6f7f9;
+  --warn-bg: #fff6e5;
+  --warn-line: #b2760a;
+  --warn-fg: #6b4400;
+  --danger: #a32330;
+  --shadow: 0 1px 2px rgb(16 24 40 / 6%), 0 8px 24px rgb(16 24 40 / 8%);
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] {
+    --bg: #0f1115;
+    --surface: #161a20;
+    --surface-2: #1d232b;
+    --fg: #e8eaee;
+    --muted: #a2a9b6;
+    --line: #29303a;
+    --accent: #8fb6ff;
+    --accent-soft: #1a2433;
+    --code-bg: #141820;
+    --warn-bg: #2a2113;
+    --warn-line: #b07d16;
+    --warn-fg: #ffcf7a;
+    --danger: #ff9ea6;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px rgb(0 0 0 / 35%);
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0f1115;
+  --surface: #161a20;
+  --surface-2: #1d232b;
+  --fg: #e8eaee;
+  --muted: #a2a9b6;
+  --line: #29303a;
+  --accent: #8fb6ff;
+  --accent-soft: #1a2433;
+  --code-bg: #141820;
+  --warn-bg: #2a2113;
+  --warn-line: #b07d16;
+  --warn-fg: #ffcf7a;
+  --danger: #ff9ea6;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 10px 30px rgb(0 0 0 / 35%);
+  color-scheme: dark;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: var(--step-0) / 1.65 var(--sans);
+  overflow-wrap: break-word;
+}
+
+/* One focus style for every control, and never a bare outline removal. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+.skip {
+  position: absolute;
+  left: 0.5rem;
+  top: -3rem;
+  z-index: 50;
+  padding: 0.5rem 0.8rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.skip:focus {
+  top: 0.5rem;
+}
+
+/* The bar ---------------------------------------------------------------- */
+
+.bar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.7rem;
+  min-height: var(--bar);
+  background: var(--bg);
+  border-bottom: 1px solid var(--line);
+}
+
+.brand {
+  flex: 0 0 auto;
+  font-weight: 650;
+  color: var(--fg);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 9rem;
+}
+
+.brand:hover {
+  text-decoration: none;
+  color: var(--accent);
+}
+
+.find {
+  flex: 1 1 auto;
+  min-width: 2.5rem;
+  display: flex;
+}
+
+.find input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+}
+
+.find input::placeholder {
+  color: var(--muted);
+}
+
+.icon-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  color: var(--fg);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+}
+
+.icon-button:hover {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.menu {
+  position: relative;
+}
+
+.menu summary {
+  list-style: none;
+}
+
+.menu summary::-webkit-details-marker {
+  display: none;
+}
+
+.menu-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.4rem);
+  min-width: 9rem;
+  padding: 0.3rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: grid;
+}
+
+.menu-list a {
+  padding: 0.55rem 0.7rem;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+}
+
+.menu-list a:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+
+.menu-list a[aria-current="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.nav-toggle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* The shell -------------------------------------------------------------- */
+
+.shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+main {
+  min-width: 0;
+  /* Without a width, the automatic margins ask for a shrink-to-fit box, and a
+   * long code line then pushes the column wider than the window. */
+  width: 100%;
+  padding: 1rem 0.9rem 4rem;
+  max-width: var(--measure);
+  margin-inline: auto;
+}
+
+.nav {
+  display: none;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+  padding: 0.4rem 0.7rem 1rem;
+  max-height: calc(100vh - var(--bar));
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.nav-toggle:checked ~ .shell .nav {
+  display: block;
+}
+
+.nav-label {
+  margin: 0.3rem 0 0.2rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.tree {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tree .tree {
+  margin-left: 0.45rem;
+  padding-left: 0.55rem;
+  border-left: 1px solid var(--line);
+}
+
+.tree li {
+  margin: 0;
+}
+
+.tree a {
+  display: block;
+  padding: 0.45rem 0.4rem;
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+  font-size: 0.94rem;
+  overflow-wrap: anywhere;
+}
+
+.tree a:hover {
+  background: var(--surface-2);
+  text-decoration: none;
+}
+
+.tree a.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tree summary {
+  cursor: pointer;
+  padding: 0.45rem 0.4rem;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.94rem;
+  overflow-wrap: anywhere;
+}
+
+.tree summary:hover {
+  background: var(--surface-2);
+}
+
+.tree details[open] > summary {
+  color: var(--accent);
+}
+
+/* The filter ------------------------------------------------------------- */
+
+.filter {
+  margin: 0.4rem 0 0.6rem;
+  font-size: 0.86rem;
+  color: var(--muted);
+}
+
+.filter > summary {
+  cursor: pointer;
+  padding: 0.35rem 0;
+}
+
+.filter strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.filter form {
+  display: grid;
+  /* One column that may shrink, so a long note wraps inside the sidebar instead
+   * of widening the form. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.45rem;
+  padding: 0.6rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.filter label {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  color: var(--fg);
+}
+
+.filter input[type="checkbox"] {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: var(--accent);
+}
+
+.filter input[type="text"] {
+  width: 100%;
+  min-height: 2.2rem;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.filter-actions {
+  display: grid;
+  gap: 0.55rem;
+  /* The list can run past the bottom of the sidebar, so the apply button stays
+   * in reach while a reader scrolls the types. */
+  position: sticky;
+  bottom: 0;
+  padding-top: 0.45rem;
+  background: var(--bg);
+}
+
+.filter-actions button {
+  width: 100%;
+}
+
+.filter-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.9rem;
+  font-size: 0.8rem;
+}
+
+.filter .note {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+}
+
+/* The shelves of the filter ---------------------------------------------- */
+
+.filter fieldset.types {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  /* A fieldset has a minimum content width of its own by default, which turns
+   * one long label into a horizontal scrollbar in the sidebar. */
+  min-inline-size: 0;
+}
+
+.filter legend {
+  padding: 0;
+  margin-bottom: 0.3rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.filter .type-row {
+  display: grid;
+  gap: 0.25rem;
+}
+
+/* A wide filter form, such as the drawer on a phone, holds two columns. The
+ * sidebar on a desktop is too narrow, and a column would clip a long name. */
+.filter form {
+  container-type: inline-size;
+}
+
+@container (min-width: 18rem) {
+  .filter .type-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.filter label.type {
+  gap: 0.45rem;
+  padding: 0.2rem 0.45rem;
+  font-size: 0.82rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.filter label.type span:first-of-type {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter label.type input[type="checkbox"] {
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.filter label.type:hover {
+  border-color: var(--muted);
+}
+
+/* A finger needs a bigger row than a pointer. */
+@media (hover: none) {
+  .filter label.type {
+    min-height: 2.75rem;
+    padding: 0 0.55rem;
+    font-size: 0.9rem;
+  }
+
+  .filter label.type input[type="checkbox"] {
+    width: 1.15rem;
+    height: 1.15rem;
+  }
+}
+
+/* A ticked type keeps a border as well as a tint, so the state survives a
+ * colour-blind reader and a monochrome screen. */
+.filter label.type:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.filter label.type .count {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.filter label.extra {
+  flex-wrap: wrap;
+}
+
+.filter label.extra input[type="text"] {
+  flex: 1 1 6rem;
+  width: auto;
+}
+
+button[type="submit"],
+.token-form button {
+  padding: 0.5rem 1rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--bg);
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+/* Page head -------------------------------------------------------------- */
+
+.page-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.2rem 0 0.9rem;
+}
+
+.crumbs {
+  min-width: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.crumbs a {
+  color: var(--muted);
+}
+
+.crumbs a:last-child {
+  color: var(--fg);
+}
+
+.crumbs span {
+  padding: 0 0.25rem;
+}
+
+.action {
+  flex: 0 0 auto;
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8rem;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  white-space: nowrap;
+}
+
+.action:hover {
+  background: var(--surface);
+  text-decoration: none;
+}
+
+.meta {
+  margin: 0 0 1.2rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.page-foot {
+  margin-top: 3rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+/* Previous and next ------------------------------------------------------ */
+
+.siblings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin: 2.6rem 0 0;
+}
+
+.siblings a {
+  display: block;
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--fg);
+}
+
+.siblings a:hover {
+  background: var(--surface);
+  border-color: var(--accent);
+  text-decoration: none;
+}
+
+.siblings span {
+  display: block;
+  margin-bottom: 0.15rem;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.siblings strong {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.siblings .next {
+  text-align: right;
+}
+
+/* Prose ------------------------------------------------------------------ */
+
+.md {
+  font-size: 1.02rem;
+}
+
+.md > :first-child {
+  margin-top: 0;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  line-height: 1.25;
+  margin: 1.9em 0 0.55em;
+  scroll-margin-top: calc(var(--bar) + 1rem);
+  text-wrap: balance;
+}
+
+h1 {
+  font-size: var(--step-4);
+  letter-spacing: -0.02em;
+  margin-top: 0.4em;
+}
+
+h2 {
+  font-size: var(--step-3);
+  letter-spacing: -0.015em;
+  padding-bottom: 0.25rem;
+  border-bottom: 1px solid var(--line);
+}
+
+h3 {
+  font-size: var(--step-2);
+}
+
+h4 {
+  font-size: var(--step-1);
+}
+
+h5,
+h6 {
+  font-size: 1rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* A heading links to itself, so a reader can copy the address of a section. The
+ * link keeps the heading colour and stays unmarked until the pointer or the
+ * keyboard arrives, so the heading still reads as a heading. */
+.md :is(h1, h2, h3, h4, h5, h6) .heading-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.md :is(h1, h2, h3, h4, h5, h6) .heading-link:hover,
+.md :is(h1, h2, h3, h4, h5, h6) .heading-link:focus-visible {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.18em;
+}
+
+.md p,
+.md ul,
+.md ol,
+.md dl {
+  margin: 0 0 1rem;
+}
+
+.md li {
+  margin: 0.25rem 0;
+}
+
+.md li > ul,
+.md li > ol {
+  margin: 0.25rem 0 0.4rem;
+}
+
+/* A link in prose carries an underline, so colour is never the only cue. */
+.md a {
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.15em;
+}
+
+.md a:hover {
+  text-decoration-thickness: 2px;
+}
+
+.md img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-sm);
+}
+
+.md hr {
+  border: 0;
+  border-top: 1px solid var(--line);
+  margin: 2.2rem 0;
+}
+
+.md blockquote {
+  margin: 1.2rem 0;
+  padding: 0.2rem 0 0.2rem 1rem;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}
+
+.md blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* GitHub-style callouts: an amber edge, a border and a worded label. */
+.md .alert {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--warn-line);
+  border-radius: var(--radius-sm);
+  background: var(--warn-bg);
+  color: var(--fg);
+}
+
+.md .alert-title {
+  margin: 0 0 0.3rem;
+  font-weight: 650;
+  font-size: 0.82rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--warn-fg);
+}
+
+.md .alert > :last-child {
+  margin-bottom: 0;
+}
+
+.md dl dt {
+  font-weight: 600;
+}
+
+.md dl dd {
+  margin: 0 0 0.6rem 1rem;
+}
+
+.md kbd {
+  padding: 0.1rem 0.35rem;
+  font: 0.85em var(--mono);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+}
+
+.md sup,
+.md .footnote-reference {
+  font-size: 0.8em;
+}
+
+.md .footnote-definition {
+  display: flex;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin: 0.3rem 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.md .footnote-definition > p {
+  margin: 0;
+}
+
+.md .footnote-definition sup {
+  flex: 0 0 auto;
+}
+
+/* Tables scroll inside their own box, never the page. */
+.table-scroll {
+  overflow-x: auto;
+  max-width: 100%;
+  margin: 1.2rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.table-scroll:focus-visible {
+  outline-offset: 1px;
+}
+
+.md table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.92rem;
+}
+
+.md th,
+.md td {
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+.md th {
+  background: var(--surface-2);
+  font-weight: 650;
+}
+
+.md tr:last-child td {
+  border-bottom: 0;
+}
+
+.md tbody tr:hover {
+  background: var(--surface);
+}
+
+/* Math ------------------------------------------------------------------- */
+
+.math {
+  font-size: 1.02em;
+}
+
+.math-display {
+  display: block;
+  margin: 1rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  text-align: center;
+}
+
+.math-source {
+  font-family: var(--mono);
+  font-size: 0.9em;
+}
+
+.katex-display {
+  margin: 0.6rem 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.2rem 0;
+}
+
+/* Diagrams --------------------------------------------------------------- */
+
+.diagram {
+  display: block;
+  margin: 1.2rem 0;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow-x: auto;
+  text-align: center;
+}
+
+.mermaid {
+  display: block;
+  width: 100%;
+  margin: 0;
+  background: transparent;
+  text-align: center;
+  font: 0.9rem var(--mono);
+  white-space: pre-wrap;
+}
+
+.mermaid svg {
+  display: block;
+  margin: 0 auto;
+  max-width: 100%;
+  height: auto;
+}
+
+.diagram[data-failed="yes"] {
+  display: block;
+  border-left: 3px solid var(--warn-line);
+  background: var(--warn-bg);
+}
+
+/* Code ------------------------------------------------------------------- */
+
+.md code,
+.nb code {
+  padding: 0.1rem 0.3rem;
+  font-family: var(--mono);
+  font-size: 0.88em;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+}
+
+.code-block {
+  position: relative;
+  margin: 1.2rem 0;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.code-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.45rem 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--line);
+  font: 0.75rem var(--mono);
+  color: var(--muted);
+  text-transform: lowercase;
+}
+
+.code-block pre {
+  margin: 0;
+  padding: 0.75rem;
+  overflow-x: auto;
+  font: 0.82rem / 1.55 var(--mono);
+  tab-size: 4;
+}
+
+.code-block code {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  white-space: pre;
+}
+
+.copyable {
+  position: relative;
+}
+
+.copy {
+  padding: 0.2rem 0.5rem;
+  font: 600 0.7rem var(--mono);
+  color: var(--muted);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.copyable:hover .copy,
+.copy:focus-visible,
+.copy.shown {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .copy {
+    opacity: 0.75;
+  }
+}
+
+.code {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  padding: 0;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  font: 0.82rem / 1.55 var(--mono);
+}
+
+.code .code-head {
+  grid-column: 1 / -1;
+}
+
+.code > .copy {
+  position: static;
+}
+
+.code pre {
+  margin: 0;
+  padding: 0.75rem 0;
+  overflow-x: auto;
+}
+
+.code .gutter {
+  flex: 0 0 auto;
+  text-align: right;
+  color: var(--muted);
+  user-select: none;
+  border-right: 1px solid var(--line);
+  padding: 0.75rem 0.6rem;
+}
+
+.code > pre:last-child {
+  padding: 0.75rem;
+}
+
+.code .gutter a {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.code .gutter a:hover {
+  color: var(--accent);
+}
+
+.code code {
+  padding: 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  white-space: pre;
+  tab-size: 4;
+}
+
+.code .line {
+  display: inline;
+}
+
+.code .line:target {
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 0.2rem var(--accent-soft);
+}
+
+body[data-wrap="on"] .code pre,
+body[data-wrap="on"] .code-block pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+body[data-wrap="on"] .code code,
+body[data-wrap="on"] .code-block code {
+  white-space: inherit;
+}
+
+/* Notebooks -------------------------------------------------------------- */
+
+.nb-cell {
+  border-top: 1px solid var(--line);
+  margin-top: 1.4rem;
+  padding-top: 0.4rem;
+}
+
+.nb-cell:first-child {
+  border-top: 0;
+  margin-top: 0;
+}
+
+.nb-cell.md h1,
+.nb-cell.md h2 {
+  border-bottom: 0;
+  font-size: var(--step-2);
+}
+
+.nb-in {
+  margin: 0.3rem 0 0.4rem;
+  font: 0.78rem var(--mono);
+  color: var(--muted);
+}
+
+.nb-in .nb-in-link {
+  color: inherit;
+  text-decoration: none;
+}
+
+.nb-in .nb-in-link:hover,
+.nb-in .nb-in-link:focus-visible {
+  text-decoration: underline;
+}
+
+.nb-source {
+  margin: 0 0 0.7rem;
+  padding: 0.7rem;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font: 0.82rem / 1.55 var(--mono);
+}
+
+.nb-source code {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  white-space: pre;
+}
+
+.nb-out {
+  margin: 0.5rem 0 0.9rem;
+}
+
+.nb-out pre {
+  margin: 0;
+  padding: 0.7rem;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font: 0.82rem / 1.55 var(--mono);
+}
+
+/* A traceback is a `pre` that is itself the output box, so the rule above does
+ * not reach it. Without this, one long traceback widens the whole page. */
+pre.nb-out {
+  margin: 0.5rem 0 0.9rem;
+  padding: 0.7rem;
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  overflow-x: auto;
+  font: 0.82rem / 1.55 var(--mono);
+}
+
+.nb-html {
+  overflow-x: auto;
+  padding: 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.nb-html table,
+.nb-html .dataframe {
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.nb-html th,
+.nb-html td {
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--line);
+  text-align: right;
+}
+
+.nb-html th {
+  background: var(--surface);
+  font-weight: 600;
+}
+
+.nb-html img {
+  max-width: 100%;
+  height: auto;
+}
+
+.nb-error {
+  color: var(--danger);
+  border-left: 3px solid var(--danger);
+  padding-left: 0.7rem;
+}
+
+.nb-error::before {
+  content: "Error";
+  display: block;
+  font: 650 0.72rem var(--sans);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.nb-note {
+  margin: 0.4rem 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
+.nb-fold summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--muted);
+  padding: 0.3rem 0;
+}
+
+.nb-out img {
+  max-width: 100%;
+  height: auto;
+}
+
+figure.nb-out {
+  margin: 0.5rem 0 0.9rem;
+}
+
+/* Listings and search ---------------------------------------------------- */
+
+.listing {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line);
+}
+
+.listing li {
+  border-bottom: 1px solid var(--line);
+}
+
+.listing a {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.72rem 0.25rem;
+  color: var(--fg);
+}
+
+.listing a:hover {
+  text-decoration: none;
+  background: var(--surface);
+}
+
+.listing .name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.listing .kind {
+  flex: 0 0 auto;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+/* Table of contents ------------------------------------------------------ */
+
+.toc {
+  font-size: 0.85rem;
+}
+
+.toc summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  padding: 0.3rem 0;
+}
+
+.toc-icon {
+  display: none;
+}
+
+.toc ul {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+}
+
+.toc li {
+  margin: 0.15rem 0;
+}
+
+.toc a {
+  display: block;
+  padding: 0.25rem 0.4rem;
+  border-left: 2px solid transparent;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.toc a:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.toc a[aria-current="true"] {
+  color: var(--accent);
+  border-left-color: var(--accent);
+  font-weight: 600;
+}
+
+.toc .level3 a {
+  padding-left: 1.1rem;
+}
+
+.toc .level4 a,
+.toc .level5 a,
+.toc .level6 a {
+  padding-left: 1.8rem;
+}
+
+@media (max-width: 77.99rem) {
+  /* On a phone the contents sits in a button at the foot of the screen. It takes
+   * the right corner, where reading mode puts its own control, so the corner
+   * always holds the control for the current mode. */
+  .toc {
+    position: fixed;
+    right: max(0.9rem, env(safe-area-inset-right));
+    bottom: max(0.9rem, env(safe-area-inset-bottom));
+    z-index: 15;
+  }
+
+  .toc details {
+    display: flex;
+    flex-direction: column-reverse;
+    /* The box grows to the left from the right edge, so the button stays in the
+     * corner and the list opens above it. */
+    align-items: flex-end;
+  }
+
+  /* The control is a round button, so it covers one icon of the page, not a
+   * line of text. The label stays for a screen reader. */
+  .toc summary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    padding: 0;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    box-shadow: var(--shadow);
+    color: var(--fg);
+  }
+
+  .toc-icon {
+    display: block;
+  }
+
+  .toc-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .toc ul {
+    width: min(19rem, 82vw);
+    max-height: 55vh;
+    overflow: auto;
+    padding: 0.5rem;
+    margin: 0.4rem 0 0;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+  }
+}
+
+/* Find, palette and the update chip ------------------------------------- */
+
+.findbar {
+  position: fixed;
+  z-index: 30;
+  left: 0.6rem;
+  right: 0.6rem;
+  bottom: 0.6rem;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.5rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+
+.findbar[hidden] {
+  display: none;
+}
+
+.findbar label {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.findbar input {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.findbar .count {
+  font-size: 0.78rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.findbar button {
+  min-width: 2.3rem;
+  min-height: 2.3rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font: inherit;
+}
+
+::highlight(reposerve-find) {
+  background-color: #ffe08a;
+  color: #1a1a1a;
+}
+
+::highlight(reposerve-find-current) {
+  background-color: #ffb300;
+  color: #1a1a1a;
+}
+
+.palette {
+  width: min(34rem, 92vw);
+  max-height: 70vh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.palette::backdrop {
+  background: rgb(0 0 0 / 35%);
+}
+
+.palette input {
+  width: 100%;
+  padding: 0.9rem 1rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--fg);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.palette ul {
+  list-style: none;
+  margin: 0;
+  padding: 0.3rem;
+  max-height: 55vh;
+  overflow: auto;
+}
+
+.palette li {
+  padding: 0.5rem 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.92rem;
+  overflow-wrap: anywhere;
+}
+
+.palette li[aria-selected="true"] {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.palette li mark {
+  background: none;
+  color: var(--accent);
+  font-weight: 650;
+}
+
+.palette .none {
+  color: var(--muted);
+  cursor: default;
+}
+
+.chip {
+  position: fixed;
+  z-index: 30;
+  right: 0.8rem;
+  bottom: 0.8rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+
+.chip[hidden] {
+  display: none;
+}
+
+.chip button {
+  padding: 0.2rem 0.5rem;
+  font: inherit;
+  font-size: 0.8rem;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+/* Token page ------------------------------------------------------------- */
+
+.token-form {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 20rem;
+}
+
+.token-form input {
+  padding: 0.55rem 0.7rem;
+  font: inherit;
+  font-size: 1rem;
+  color: var(--fg);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+/* Reading mode ----------------------------------------------------------- */
+
+html[data-reading="on"] .bar,
+html[data-reading="on"] .nav,
+html[data-reading="on"] .toc,
+html[data-reading="on"] .page-head,
+html[data-reading="on"] .page-foot {
+  display: none;
+}
+
+html[data-reading="on"] .shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html[data-reading="on"] main {
+  max-width: min(64rem, 100%);
+  padding-top: 2.5rem;
+}
+
+html[data-reading="on"] .md {
+  font-size: 1.08rem;
+}
+
+/* The reader control ----------------------------------------------------- */
+
+/* Reading mode hides the header, so this control floats over the text. It sits
+ * at the foot of the page, where a thumb reaches it, and it is always drawn:
+ * the icon stays visible, and the menu holds the way out. */
+.reader {
+  display: none;
+  position: fixed;
+  right: max(0.9rem, env(safe-area-inset-right));
+  bottom: max(0.9rem, env(safe-area-inset-bottom));
+  z-index: 60;
+}
+
+html[data-reading="on"] .reader {
+  display: block;
+}
+
+.reader-button {
+  width: 2.75rem;
+  height: 2.75rem;
+  min-width: 0;
+  padding: 0;
+  color: var(--fg);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+  opacity: 0.88;
+}
+
+.reader-button:hover,
+.reader-button:focus-visible,
+.reader-menu[open] .reader-button {
+  opacity: 1;
+  border-color: var(--muted);
+}
+
+.reader-menu .reader-list {
+  top: auto;
+  bottom: calc(100% + 0.5rem);
+  right: 0;
+  min-width: 15rem;
+}
+
+.reader-leave {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* A keyboard hint means nothing on a screen without a keyboard. */
+@media (hover: none) {
+  .menu-list kbd {
+    display: none;
+  }
+}
+
+.reader-leave kbd,
+.menu-list kbd {
+  padding: 0.05rem 0.3rem;
+  font: 0.72rem var(--mono);
+  color: var(--muted);
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 0.3rem;
+}
+
+.menu-label {
+  margin: 0.45rem 0.7rem 0.15rem;
+  font-size: 0.7rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The contents pill floats at the foot of a phone, so keep it off the text. */
+@media (max-width: 77.99rem) {
+  main {
+    padding-bottom: 6rem;
+  }
+}
+
+/* A diagram keeps its natural size on a phone, and the reader swipes it. */
+@media (max-width: 59.99rem) {
+  .mermaid svg {
+    max-width: none;
+  }
+}
+
+/* Wide screens ----------------------------------------------------------- */
+
+@media (min-width: 60rem) {
+  .nav-toggle,
+  .nav-button {
+    display: none;
+  }
+
+  .shell {
+    grid-template-columns: 17rem minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .nav {
+    display: block;
+    position: sticky;
+    top: var(--bar);
+    height: calc(100dvh - var(--bar));
+    border-bottom: 0;
+    border-right: 1px solid var(--line);
+    padding: 0.8rem 0.9rem 2rem;
+  }
+
+  main {
+    padding: 1.6rem 2rem 6rem;
+  }
+
+  .brand {
+    max-width: 14rem;
+  }
+}
+
+@media (min-width: 78rem) {
+  .shell {
+    grid-template-columns: 17rem minmax(0, var(--measure)) 15rem;
+    justify-content: center;
+    column-gap: 2rem;
+  }
+
+  /* A page without a table of contents keeps two columns, centred. */
+  .shell.no-toc {
+    grid-template-columns: 17rem minmax(0, var(--measure));
+  }
+
+  .toc {
+    display: block;
+    position: sticky;
+    top: calc(var(--bar) + 1.5rem);
+    max-height: calc(100vh - var(--bar) - 3rem);
+    overflow: auto;
+    padding: 1.6rem 0 2rem;
+  }
+
+  .toc details {
+    display: block;
+  }
+
+  .toc details > summary {
+    padding: 0;
+    border: 0;
+    background: none;
+    box-shadow: none;
+  }
+
+  .toc ul {
+    position: static;
+    width: auto;
+    max-height: none;
+    border: 0;
+    box-shadow: none;
+    background: none;
+    padding: 0;
+  }
+
+  main {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* Print ------------------------------------------------------------------ */
+
+@media print {
+  .bar,
+  .nav,
+  .toc,
+  .reader,
+  .page-head,
+  .page-foot,
+  .chip,
+  .findbar,
+  .copy {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+    color: #000;
+    font-size: 11pt;
+  }
+
+  .shell {
+    display: block;
+  }
+
+  main {
+    max-width: none;
+    padding: 0;
+  }
+
+  a {
+    color: #000;
+  }
+
+  .code,
+  .code-block pre,
+  .nb-source {
+    border: 1px solid #ccc;
+  }
+
+  h1,
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  .table-scroll,
+  .code-block,
+  .nb-cell {
+    break-inside: avoid;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.001ms !important;
+    animation-duration: 0.001ms !important;
+  }
+}

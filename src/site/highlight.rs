@@ -22,7 +22,10 @@ fn class_style() -> ClassStyle {
 /// The light palette, used when the page is light.
 const LIGHT_THEME: &str = "InspiredGitHub";
 /// The dark palette, used when the page is dark.
-const DARK_THEME: &str = "base16-ocean.dark";
+///
+/// This palette separates its colours by lightness as well as by hue, so a
+/// reader who cannot tell red from green still sees the difference.
+const DARK_THEME: &str = "Solarized (dark)";
 
 /// A syntax set and two palettes, built once for the whole process.
 pub struct Highlighter {
@@ -90,20 +93,50 @@ impl Highlighter {
 
     /// The stylesheet for both palettes.
     ///
-    /// The light rules are plain; the dark rules repeat under a device-preference
-    /// query and under an explicit dark choice, so one stylesheet serves `Auto`,
-    /// `Light` and `Dark`.
+    /// The light and dark rules are scoped to the exact theme attribute that
+    /// selected them, so one stylesheet serves `Auto`, `Light` and `Dark`
+    /// without applying a palette twice.
     #[must_use]
     pub fn css(&self) -> String {
         let light = css_for_theme_with_class_style(&self.light, class_style()).unwrap_or_default();
         let dark = css_for_theme_with_class_style(&self.dark, class_style()).unwrap_or_default();
+        let light_chosen = scoped(&light, ":root[data-theme=light]");
+        let light_auto = scoped(&light, ":root[data-theme=auto]");
+        let dark_chosen = scoped(&dark, ":root[data-theme=dark]");
+        let dark_auto = scoped(&dark, ":root[data-theme=auto]");
         format!(
-            "{}\n@media (prefers-color-scheme:dark){{\n{}\n}}\n{}\n",
-            scoped(&light, ":root:not([data-theme=light])"),
-            scoped(&dark, ":root:not([data-theme=light])"),
-            scoped(&dark, ":root[data-theme=dark]"),
+            "{light_chosen}\n\
+             @media (prefers-color-scheme: light) {{\n{light_auto}\n}}\n\
+             {dark_chosen}\n\
+             @media (prefers-color-scheme: dark) {{\n{dark_auto}\n}}\n"
         )
     }
+
+    /// The fingerprint of the stylesheet, for a URL the browser can keep.
+    #[must_use]
+    pub fn fingerprint(&self) -> String {
+        cached().fingerprint.clone()
+    }
+
+    /// The stylesheet, built once for the whole process.
+    #[must_use]
+    pub fn stylesheet(&self) -> &'static str {
+        &cached().css
+    }
+}
+
+struct Cached {
+    css: String,
+    fingerprint: String,
+}
+
+fn cached() -> &'static Cached {
+    static CACHED: OnceLock<Cached> = OnceLock::new();
+    CACHED.get_or_init(|| {
+        let css = global().css();
+        let fingerprint = crate::web::assets::hash_of(css.as_bytes());
+        Cached { css, fingerprint }
+    })
 }
 
 /// Prefixes every selector in a stylesheet, so it applies only under a scope.
@@ -183,20 +216,24 @@ mod tests {
     }
 
     #[test]
-    fn the_stylesheet_scopes_the_dark_palette() {
+    fn the_stylesheet_scopes_each_palette_to_its_theme() {
         let css = global().css();
 
         assert!(
-            css.contains(":root:not([data-theme=light]) .hl-"),
-            "the light rules are present"
+            css.contains(":root[data-theme=light] .hl-"),
+            "the light rules follow an explicit light choice"
         );
         assert!(
             css.contains(":root[data-theme=dark] .hl-"),
             "the dark rules are scoped to an explicit choice"
         );
         assert!(
-            css.contains("@media (prefers-color-scheme:dark)"),
+            css.contains("@media (prefers-color-scheme: dark)"),
             "the dark rules follow the device preference"
+        );
+        assert!(
+            css.contains("@media (prefers-color-scheme: light)"),
+            "the light rules follow the device preference"
         );
         assert!(
             !css.contains("background-color"),

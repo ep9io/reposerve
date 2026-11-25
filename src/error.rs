@@ -10,12 +10,17 @@ use thiserror::Error;
 pub enum Error {
     /// The directory to serve is missing or is not a directory.
     #[error("the root {path} is not a readable directory")]
-    RootUnavailable { path: PathBuf },
+    RootUnavailable {
+        /// The directory the reader asked for.
+        path: PathBuf,
+    },
 
     /// The configuration file could not be read.
     #[error("cannot read the configuration at {path}: {source}")]
     ConfigRead {
+        /// The configuration file.
         path: PathBuf,
+        /// The failure from the file system.
         #[source]
         source: io::Error,
     },
@@ -23,31 +28,45 @@ pub enum Error {
     /// The configuration file is not valid TOML for this schema.
     #[error("cannot parse the configuration at {path}: {source}")]
     ConfigParse {
+        /// The configuration file.
         path: PathBuf,
+        /// The failure from the TOML parser.
         #[source]
         source: Box<toml::de::Error>,
     },
 
     /// A setting is present but cannot work.
     #[error("the configuration is not valid: {reason}")]
-    InvalidConfig { reason: String },
+    InvalidConfig {
+        /// What is wrong, in one sentence.
+        reason: String,
+    },
 
     /// `git` could not be started.
     #[error("cannot run `git ls-files` in {root}: {source}")]
     GitUnavailable {
+        /// The directory the command ran in.
         root: PathBuf,
+        /// The failure from the process start.
         #[source]
         source: io::Error,
     },
 
     /// `git` refused the directory, which means it is not a working tree.
     #[error("{root} is not a Git working tree: {message}")]
-    NotAWorkTree { root: PathBuf, message: String },
+    NotAWorkTree {
+        /// The directory that was tested.
+        root: PathBuf,
+        /// What `git` said, without the trailing newline.
+        message: String,
+    },
 
     /// The directory could not be walked, when `git` is not available.
     #[error("cannot list {path}: {source}")]
     Walk {
+        /// The directory that could not be read.
         path: PathBuf,
+        /// The failure from the file system.
         #[source]
         source: io::Error,
     },
@@ -55,19 +74,26 @@ pub enum Error {
     /// A listed file could not be read, or resolved outside the root.
     #[error("cannot read {path}: {source}")]
     Read {
+        /// The file that could not be read.
         path: PathBuf,
+        /// The failure from the file system.
         #[source]
         source: io::Error,
     },
 
     /// The requested path is not part of the served content.
     #[error("{path} is not part of the served content")]
-    NotFound { path: String },
+    NotFound {
+        /// The path a reader asked for.
+        path: String,
+    },
 
     /// The listening socket could not be created.
     #[error("cannot listen on {address}: {source}")]
     Bind {
+        /// The address and port, as written.
         address: String,
+        /// The failure from the network stack.
         #[source]
         source: io::Error,
     },
@@ -75,6 +101,7 @@ pub enum Error {
     /// The server stopped because of a transport failure.
     #[error("the server stopped: {source}")]
     Serve {
+        /// The failure from the network stack.
         #[source]
         source: io::Error,
     },

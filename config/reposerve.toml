@@ -1,0 +1,67 @@
+# Configuration for the showcase tree.
+#
+# Start the server with this file:
+#
+#     cargo run --release -- -c config/reposerve.toml
+#
+# A relative path such as `./showcase` counts from the directory you start the
+# server in, not from this file.
+#
+# Every key is optional. A key that is not set takes its default, and a value on
+# the command line wins over this file.
+
+# The directory to serve.
+root = "./showcase"
+
+# The port to listen on. The default is 8095.
+port = 8095
+
+# The name in the header and in the browser title.
+title = "showcase"
+
+# The types a first visit shows. The showcase holds one file of each type, so
+# this list reaches every sample.
+extensions = ["md", "txt", "rs", "py", "js", "sql", "toml", "json", "html", "ipynb", "svg", "png"]
+
+# The checkboxes in the filter form. Keep the list short: it is a set of quick
+# choices, not a list of every type.
+presets = ["md", "rs", "py", "ipynb"]
+
+# Extensions a page may embed. An image is served even when the filter hides it,
+# so a document that refers to `media/chart.png` still shows the picture.
+assets = ["png", "jpg", "jpeg", "gif", "webp", "svg"]
+
+# Whether a page reloads itself when its file changes.
+live_reload = true
+
+# The colour scheme a first visit starts with.
+theme = "auto"
+
+# ---------------------------------------------------------------- defaults --
+#
+# The keys below keep their default value. Remove the `#` to set one.
+
+# The address to listen on. `0.0.0.0` reaches the local network, and
+# `127.0.0.1` keeps the server on this machine alone.
+# bind = "0.0.0.0"
+
+# A token every device must enter once. Leave it out when the network is trusted.
+# token = "a-shared-secret"
+
+# Only serve these directory prefixes. An empty list serves the whole tree.
+# include = ["markdown", "notebooks"]
+
+# The width of the reading column, in `rem`. The range is 30 to 90.
+# reading_width = 46
+
+# Whether a page renders math with KaTeX.
+# math = true
+
+# Whether a page shows its table of contents.
+# toc = true
+
+# Whether an entry whose name starts with a dot is shown.
+# hidden = false
+
+# Whether to open a browser once the server is listening.
+# open = false
