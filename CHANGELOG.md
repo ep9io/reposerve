@@ -47,3 +47,6 @@ The first release. It serves one directory to a browser on the local network.
 - The server speaks plain HTTP and has no rate limit. Run it on a network you
   trust. Read `SECURITY.md` for the threat model.
 - Hidden entries are not served unless `--hidden` or `hidden = true` is given.
+
+[Unreleased]: https://github.com/ep9io/reposerve/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/ep9io/reposerve/releases/tag/v0.1.0
