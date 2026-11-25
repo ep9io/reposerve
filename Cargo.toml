@@ -1,0 +1,45 @@
+[package]
+name        = "reposerve"
+version     = "0.1.0"
+edition     = "2021"
+rust-version = "1.80"
+authors     = ["ep9"]
+description = "Serve a repository's Markdown, source files and notebooks to a browser on the local network"
+license     = "MIT"
+readme        = "README.md"
+documentation = "https://docs.rs/reposerve"
+keywords    = ["markdown", "documentation", "server", "browser", "notebook"]
+categories  = ["command-line-utilities", "web-programming::http-server"]
+exclude     = [".github/*", "tests/fixtures/*"]
+
+[dependencies]
+axum             = "0.8"
+clap             = { version = "4", features = ["derive"] }
+flate2           = "1"
+percent-encoding = "2"
+pulldown-cmark   = { version = "0.13", default-features = false, features = ["html"] }
+serde            = { version = "1", features = ["derive"] }
+serde_json       = "1"
+syntect          = { version = "5", default-features = false, features = ["default-syntaxes", "default-themes", "html", "parsing", "regex-onig"] }
+thiserror        = "2"
+tokio            = { version = "1", features = ["full"] }
+tokio-stream     = { version = "0.1", features = ["sync"] }
+toml             = "1"
+two-face         = "0.5"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[bin]]
+name = "reposerve"
+path = "src/main.rs"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+wildcard_enum_match_arm = "deny"
+fallible_impl_from = "deny"
+unneeded_field_pattern = "deny"
+fn_params_excessive_bools = "deny"
+must_use_candidate = "deny"
