@@ -6,6 +6,8 @@ Every change that a reader can see is listed here. The format follows
 
 ## [Unreleased]
 
+## [0.2.0] - 26 November 2026
+
 ### Fixed
 
 - The configured reading width now reaches the page. The stylesheet default
@@ -98,5 +100,6 @@ The first release. It serves one directory to a browser on the local network.
   trust. Read `SECURITY.md` for the threat model.
 - Hidden entries are not served unless `--hidden` or `hidden = true` is given.
 
-[Unreleased]: https://github.com/ep9io/reposerve/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/ep9io/reposerve/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/ep9io/reposerve/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/ep9io/reposerve/releases/tag/v0.1.0
