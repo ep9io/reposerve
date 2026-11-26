@@ -2,6 +2,8 @@
 
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
@@ -24,6 +26,13 @@ const SETTLE: Duration = Duration::from_millis(200);
 /// How often the fallback watcher looks for a change, in seconds.
 const POLL_INTERVAL: Duration = Duration::from_secs(5);
 
+/// How long a stop request waits for open connections before the process exits.
+///
+/// An open page holds the live-reload stream, which does not end by itself, and
+/// a graceful shutdown waits for every connection. Without a bound, Ctrl-C
+/// would appear to do nothing until the reader closed the browser.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
 /// What every request handler shares.
 #[derive(Debug)]
 pub struct AppState {
@@ -35,6 +44,8 @@ pub struct AppState {
     index: RwLock<Arc<RepoIndex>>,
     /// Rendered pages, dropped when a file changes.
     pub pages: PageCache,
+    /// Whether the process is stopping, so the watcher can end.
+    stopping: AtomicBool,
 }
 
 impl AppState {
@@ -51,7 +62,19 @@ impl AppState {
             reload,
             index: RwLock::new(Arc::new(index)),
             pages: PageCache::default(),
+            stopping: AtomicBool::new(false),
         })
+    }
+
+    /// Whether the process is stopping.
+    #[must_use]
+    fn stopping(&self) -> bool {
+        self.stopping.load(Ordering::Relaxed)
+    }
+
+    /// Tells the watcher to end, so the runtime can shut down.
+    fn stop(&self) {
+        self.stopping.store(true, Ordering::Relaxed);
     }
 
     /// The current file list.
@@ -107,9 +130,9 @@ impl Server {
             .map_err(|source| Error::Bind { address, source })?;
 
         let state = Arc::new(AppState::new(config)?);
-        if state.config.live_reload {
-            watch(Arc::clone(&state));
-        }
+        // The watcher always runs: with automatic reload off, a page still
+        // tells the reader that a file changed.
+        watch(Arc::clone(&state));
         Ok(Self { state, listener })
     }
 
@@ -137,8 +160,24 @@ impl Server {
     ///
     /// Fails when the transport stops.
     pub async fn serve(self) -> Result<(), Error> {
+        let state = Arc::clone(&self.state);
+        let stop = async move {
+            shutdown_signal().await;
+            println!(
+                "Stopping the server. Open pages have up to {} seconds to finish.",
+                SHUTDOWN_GRACE.as_secs()
+            );
+            state.stop();
+            // Give a response in flight a moment to finish, then stop whatever
+            // connection is still open, such as a page's reload stream. A plain
+            // thread runs even while the runtime is shutting down.
+            std::thread::spawn(|| {
+                std::thread::sleep(SHUTDOWN_GRACE);
+                std::process::exit(0);
+            });
+        };
         axum::serve(self.listener, routes::router(Arc::clone(&self.state)))
-            .with_graceful_shutdown(shutdown_signal())
+            .with_graceful_shutdown(stop)
             .await
             .map_err(|source| Error::Serve { source })
     }
@@ -176,6 +215,11 @@ impl Server {
 /// at once. A filesystem that cannot report changes falls back to a poll every
 /// few seconds, which costs one listing pass.
 fn watch(state: Arc<AppState>) {
+    let hidden = state.config.hidden;
+    // The watcher reports absolute paths, so compare against an absolute root.
+    let root =
+        std::fs::canonicalize(&state.config.root).unwrap_or_else(|_| state.config.root.clone());
+    let watched_root = root.clone();
     tokio::task::spawn_blocking(move || {
         let (sender, receiver) = std::sync::mpsc::channel::<PathBuf>();
         let mut watcher =
@@ -190,7 +234,10 @@ fn watch(state: Arc<AppState>) {
                     return;
                 }
                 for path in event.paths {
-                    if is_ignored(&path) {
+                    // A hidden component above the root, such as a home
+                    // directory, is not part of the served path.
+                    let local = path.strip_prefix(&watched_root).unwrap_or(path.as_path());
+                    if is_ignored(local, hidden) {
                         continue;
                     }
                     let _ = sender.send(path);
@@ -207,15 +254,17 @@ fn watch(state: Arc<AppState>) {
                 "warning: cannot watch {}: {error}",
                 state.config.root.display()
             );
-            poll(state);
+            poll(&state);
             return;
         }
         let mut batch: Vec<String> = Vec::new();
-        // The watcher reports absolute paths, so compare against an absolute
-        // root even when the caller gave a relative one.
-        let root =
-            std::fs::canonicalize(&state.config.root).unwrap_or_else(|_| state.config.root.clone());
-        while let Ok(path) = receiver.recv() {
+        loop {
+            let path = match receiver.recv_timeout(SETTLE) {
+                Ok(path) => path,
+                Err(RecvTimeoutError::Timeout) if state.stopping() => break,
+                Err(RecvTimeoutError::Timeout) => continue,
+                Err(RecvTimeoutError::Disconnected) => break,
+            };
             batch.push(relative(&root, &path));
             // Collect the rest of a burst, so one save yields one reload.
             while let Ok(path) = receiver.recv_timeout(SETTLE) {
@@ -230,16 +279,19 @@ fn watch(state: Arc<AppState>) {
 }
 
 /// The fallback watcher, for a filesystem that reports no events.
-fn poll(state: Arc<AppState>) {
-    let mut previous = fingerprint(&state);
-    loop {
+fn poll(state: &AppState) {
+    let mut previous = fingerprint(state);
+    while !state.stopping() {
         std::thread::sleep(POLL_INTERVAL);
-        let current = fingerprint(&state);
+        if state.stopping() {
+            return;
+        }
+        let current = fingerprint(state);
         if current == previous {
             continue;
         }
         previous = current;
-        announce(&state, &[]);
+        announce(state, &[]);
     }
 }
 
@@ -262,11 +314,25 @@ fn fingerprint(state: &AppState) -> u64 {
 
 /// Reloads the file list, drops the page cache and tells every browser.
 fn announce(state: &AppState, paths: &[String]) {
+    let before = state.index();
     if let Err(error) = state.refresh() {
         eprintln!("warning: cannot reload the file list: {error}");
         return;
     }
-    let message = serde_json::json!({ "paths": paths }).to_string();
+    // A path that is not served before or after the refresh is a tool file, not
+    // repository content, so it must not raise a notice. An empty list means the
+    // fallback watcher only knows that something in the served set changed.
+    let after = state.index();
+    let served: Vec<String> = paths
+        .iter()
+        .filter(|path| before.contains(path) || after.contains(path))
+        .cloned()
+        .collect();
+    if !paths.is_empty() && served.is_empty() {
+        return;
+    }
+    let changed = if paths.is_empty() { paths } else { &served };
+    let message = serde_json::json!({ "paths": changed }).to_string();
     // No receivers means no browser is listening, which is normal.
     let _ = state.reload.send(message);
 }
@@ -294,12 +360,26 @@ fn affects_content(kind: &notify::EventKind) -> bool {
 }
 
 /// Whether a path belongs to a tool, not to the served content.
-fn is_ignored(path: &Path) -> bool {
+///
+/// An editor's swap file changes while the reader types, long before a write,
+/// and a hidden file is not served unless `--hidden` is given. Neither should
+/// wake a page.
+fn is_ignored(path: &Path, hidden: bool) -> bool {
+    if let Some(name) = path.file_name().and_then(|name| name.to_str()) {
+        let artefact = name.ends_with('~')
+            || name.ends_with(".swp")
+            || name.ends_with(".swx")
+            || name.ends_with(".swo")
+            || name == "4913";
+        if artefact {
+            return true;
+        }
+    }
     path.components().any(|component| {
-        matches!(
-            component.as_os_str().to_str(),
-            Some(".git" | "target" | "node_modules")
-        )
+        let Some(name) = component.as_os_str().to_str() else {
+            return true;
+        };
+        matches!(name, ".git" | "target" | "node_modules") || (!hidden && name.starts_with('.'))
     })
 }
 
@@ -396,9 +476,25 @@ mod tests {
 
     #[test]
     fn a_tool_directory_is_ignored() {
-        assert!(is_ignored(Path::new("/repo/.git/index")));
-        assert!(is_ignored(Path::new("/repo/target/debug/x")));
-        assert!(is_ignored(Path::new("/repo/node_modules/a/b.js")));
-        assert!(!is_ignored(Path::new("/repo/docs/guide.md")));
+        assert!(is_ignored(Path::new("/repo/.git/index"), true));
+        assert!(is_ignored(Path::new("/repo/target/debug/x"), true));
+        assert!(is_ignored(Path::new("/repo/node_modules/a/b.js"), true));
+        assert!(!is_ignored(Path::new("/repo/docs/guide.md"), false));
+    }
+
+    #[test]
+    fn editor_artefacts_are_ignored() {
+        assert!(is_ignored(Path::new("/repo/docs/.notes.md.swp"), false));
+        assert!(is_ignored(Path::new("/repo/docs/.notes.md.swp"), true));
+        assert!(is_ignored(Path::new("/repo/docs/notes.md~"), true));
+        assert!(is_ignored(Path::new("/repo/4913"), true));
+        assert!(
+            is_ignored(Path::new("/repo/.hidden/notes.md"), false),
+            "a hidden entry is not served without --hidden"
+        );
+        assert!(
+            !is_ignored(Path::new("/repo/.hidden/notes.md"), true),
+            "with --hidden the same entry is served"
+        );
     }
 }

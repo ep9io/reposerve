@@ -31,7 +31,8 @@ presets = ["md", "rs", "py", "ipynb"]
 # so a document that refers to `media/chart.png` still shows the picture.
 assets = ["png", "jpg", "jpeg", "gif", "webp", "svg"]
 
-# Whether a page reloads itself when its file changes.
+# Whether a page reloads itself when its file changes. The server watches either
+# way, so a page can still offer a Reload button.
 live_reload = true
 
 # The colour scheme a first visit starts with.

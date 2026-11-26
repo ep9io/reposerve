@@ -72,7 +72,7 @@ struct Cli {
     #[arg(short, long, value_name = "FILE")]
     config: Option<PathBuf>,
 
-    /// Do not reload a page when a file changes.
+    /// Do not reload a page automatically when a file changes.
     #[arg(long)]
     no_live_reload: bool,
 

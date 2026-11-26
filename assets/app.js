@@ -497,6 +497,11 @@
 
   /* Live reload ---------------------------------------------------------- */
 
+  /* How long the notice stays after a page reloads itself, in milliseconds. */
+  var NOTICE = 5000;
+  var noticeTimer = null;
+  var noticeUntil = 0;
+
   function currentPath() {
     try {
       return decodeURIComponent(window.location.pathname).replace(/^\/+/, "");
@@ -505,10 +510,40 @@
     }
   }
 
-  function showChip() {
+  function autoReload() {
+    return root.getAttribute("data-live") === "on";
+  }
+
+  function hideChip() {
     var chip = document.getElementById("update-chip");
     if (chip) {
-      chip.hidden = false;
+      chip.hidden = true;
+    }
+    if (noticeTimer) {
+      clearTimeout(noticeTimer);
+      noticeTimer = null;
+    }
+  }
+
+  function showChip(text, label, action, duration) {
+    var chip = document.getElementById("update-chip");
+    var message = document.getElementById("update-text");
+    var button = document.getElementById("update-action");
+    if (!chip || !button) {
+      return;
+    }
+    if (message) {
+      message.textContent = text;
+    }
+    button.textContent = label;
+    button.dataset.action = action;
+    chip.hidden = false;
+    if (noticeTimer) {
+      clearTimeout(noticeTimer);
+      noticeTimer = null;
+    }
+    if (duration > 0) {
+      noticeTimer = setTimeout(hideChip, duration);
     }
   }
 
@@ -521,6 +556,36 @@
     window.location.reload();
   }
 
+  /* Reloads the page and remembers to say so once the new page is drawn. */
+  function reloadChanged() {
+    try {
+      sessionStorage.setItem("reposerve-updated", "1");
+    } catch (error) {
+      /* The reload still happens. */
+    }
+    softReload();
+  }
+
+  /* Shows the short notice after a change reloaded the page. */
+  function showReloaded() {
+    var updated = null;
+    try {
+      updated = sessionStorage.getItem("reposerve-updated");
+    } catch (error) {
+      return;
+    }
+    if (updated !== "1") {
+      return;
+    }
+    try {
+      sessionStorage.removeItem("reposerve-updated");
+    } catch (error) {
+      /* Nothing to clear. */
+    }
+    noticeUntil = Date.now() + NOTICE;
+    showChip("This file changed.", "Dismiss", "dismiss", NOTICE);
+  }
+
   function watchUpdates() {
     if (!window.EventSource) {
       return;
@@ -531,12 +596,20 @@
       try {
         message = JSON.parse(event.data);
       } catch (error) {
-        softReload();
+        if (autoReload()) {
+          reloadChanged();
+        } else {
+          showChip("A file changed.", "Reload", "reload", 0);
+        }
         return;
       }
       var changed = (message && message.paths) || [];
       if (!changed.length) {
-        softReload();
+        if (autoReload()) {
+          reloadChanged();
+        } else {
+          showChip("A file changed.", "Reload", "reload", 0);
+        }
         return;
       }
       var page = currentPath();
@@ -554,11 +627,21 @@
           }
         }
       }
-      if (affected) {
-        softReload();
-      } else {
-        showChip();
+      if (affected && autoReload()) {
+        reloadChanged();
+        return;
       }
+      // The notice that follows a reload already tells the reader about this
+      // burst, so a later path does not replace it.
+      if (Date.now() < noticeUntil) {
+        return;
+      }
+      showChip(
+        affected ? "This file changed." : "A file changed.",
+        "Reload",
+        "reload",
+        0
+      );
     };
   }
 
@@ -661,8 +744,13 @@
       toggleReading();
       return;
     }
-    if (event.target.closest("[data-reload]")) {
-      softReload();
+    var update = event.target.closest("#update-action");
+    if (update) {
+      if (update.dataset.action === "dismiss") {
+        hideChip();
+      } else {
+        softReload();
+      }
       return;
     }
     if (event.target.closest("[data-find]")) {
@@ -793,6 +881,7 @@
     }
 
     restoreScroll();
+    showReloaded();
     startLibraries();
     watchContents();
     watchUpdates();

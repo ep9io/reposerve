@@ -45,7 +45,8 @@ pub struct Config {
     pub title: String,
     /// A token required on the first visit. `None` lets every request through.
     pub token: Option<String>,
-    /// Whether a page reloads itself when a file changes.
+    /// Whether a page reloads itself when a file changes. The watcher still
+    /// runs when this is off, so the page can offer a Reload button.
     pub live_reload: bool,
     /// The extensions shown when the request carries no filter cookie.
     pub extensions: Extensions,
