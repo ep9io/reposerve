@@ -267,6 +267,7 @@ mod tests {
             theme: Theme::Auto,
             extensions: Extensions::parse(extensions),
             reading: false,
+            width: config.reading_width,
             config,
         }
     }

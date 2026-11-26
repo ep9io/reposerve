@@ -22,7 +22,7 @@ pub fn aside(headings: &[Heading], label: &str) -> String {
          <summary aria-label=\"{label}\">\
          <svg class=\"toc-icon\" viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" aria-hidden=\"true\" \
          fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.7\">\
-         <path d=\"M4 6h16M4 12h16M4 18h10\"/></svg>\
+         <path d=\"M4 6h16M4 12h16M4 18h16\"/></svg>\
          <span class=\"toc-label\">{label}</span></summary><ul>"
     );
     for heading in headings {

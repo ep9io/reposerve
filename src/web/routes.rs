@@ -18,6 +18,7 @@ use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::{Stream, StreamExt};
 use tower_http::compression::CompressionLayer;
 
+use crate::config::{MAX_READING_WIDTH, MIN_READING_WIDTH};
 use crate::site::highlight;
 use crate::site::html::{href, KIB};
 use crate::site::index::{normalise_request_path, Extensions, Listing};
@@ -39,6 +40,8 @@ const THEME_COOKIE: &str = "reposerve_theme";
 const FILTER_COOKIE: &str = "reposerve_ext";
 /// The name of the cookie that carries the reading mode.
 const READING_COOKIE: &str = "reposerve_reading";
+/// The name of the cookie that carries the reading width.
+const WIDTH_COOKIE: &str = "reposerve_width";
 
 /// A year, in seconds. The longest lifetime a browser accepts.
 const ONE_YEAR: &str = "31536000";
@@ -70,6 +73,7 @@ struct Choices {
     theme: Theme,
     extensions: Extensions,
     reading: bool,
+    width: u16,
 }
 
 impl Choices {
@@ -79,6 +83,9 @@ impl Choices {
             extensions: cookie(headers, FILTER_COOKIE)
                 .map_or_else(|| config.extensions.clone(), Extensions::parse),
             reading: cookie(headers, READING_COOKIE).is_some_and(|value| value == "on"),
+            width: cookie(headers, WIDTH_COOKIE).map_or(config.reading_width, |value| {
+                width(value, config.reading_width)
+            }),
         }
     }
 
@@ -87,16 +94,18 @@ impl Choices {
             theme: self.theme,
             extensions: self.extensions.clone(),
             reading: self.reading,
+            width: self.width,
             config,
         }
     }
 
     fn key(&self) -> String {
         format!(
-            "{}|{}|{}",
+            "{}|{}|{}|{}",
             self.theme.value(),
             self.extensions.value(),
-            self.reading
+            self.reading,
+            self.width
         )
     }
 }
@@ -116,6 +125,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/filter/apply", get(apply_filter))
         .route("/theme/{mode}", get(switch_theme))
         .route("/reading/{state}", get(switch_reading))
+        .route("/width/{rem}", get(switch_width))
         .route("/highlight.css", get(highlight_css))
         .route("/manifest.webmanifest", get(manifest))
         .route("/assets/{hash}/{*name}", get(asset))
@@ -310,6 +320,31 @@ async fn switch_reading(Path(state): Path<String>, Query(query): Query<NextQuery
         value,
         ONE_YEAR,
     )
+}
+
+/// Stores the chosen reading width and returns the reader to the page they were on.
+async fn switch_width(
+    State(state): State<Arc<AppState>>,
+    Path(rem): Path<String>,
+    Query(query): Query<NextQuery>,
+) -> Response {
+    let width = width(&rem, state.config.reading_width);
+    redirect_with_cookie(
+        &safe_target(query.next.as_deref()),
+        WIDTH_COOKIE,
+        &width.to_string(),
+        ONE_YEAR,
+    )
+}
+
+/// A width from a cookie or a link, when it is inside the allowed range.
+fn width(value: &str, fallback: u16) -> u16 {
+    value
+        .trim()
+        .parse::<u16>()
+        .ok()
+        .filter(|rem| (MIN_READING_WIDTH..=MAX_READING_WIDTH).contains(rem))
+        .unwrap_or(fallback)
 }
 
 /// The filter form lives in the sidebar now. An old link lands on the root.
@@ -757,6 +792,7 @@ async fn require_token(
         theme: Choices::from_headers(request.headers(), &state.config).theme,
         extensions: state.config.extensions.clone(),
         reading: false,
+        width: state.config.reading_width,
         config: &state.config,
     };
     let html = ui::views::token(&context(&listing, &view, "", "Token required"));
@@ -817,6 +853,15 @@ fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_width_must_be_inside_the_allowed_range() {
+        assert_eq!(width("56", 46), 56);
+        assert_eq!(width(" 68 ", 46), 68);
+        assert_eq!(width("12", 46), 46);
+        assert_eq!(width("91", 46), 46);
+        assert_eq!(width("wide", 46), 46);
+    }
 
     #[test]
     fn the_return_address_must_stay_on_this_server() {

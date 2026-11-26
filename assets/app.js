@@ -642,7 +642,7 @@
   /* Wiring --------------------------------------------------------------- */
 
   document.addEventListener("click", function (event) {
-    var theme = event.target.closest(".theme-menu a");
+    var theme = event.target.closest(".theme-option");
     if (theme) {
       event.preventDefault();
       var mode = theme.getAttribute("href").split("/theme/")[1].split("?")[0];

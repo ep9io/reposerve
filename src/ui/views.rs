@@ -9,6 +9,7 @@ use crate::site::html::{escape, href, size_label};
 use crate::site::index::{Listing, TreeNode};
 use crate::site::render::{source_view, Document};
 
+use super::pager;
 use super::shell::{self, Page, View};
 use super::sidebar;
 
@@ -36,6 +37,7 @@ impl Rendered<'_> {
         &'a self,
         headings: &'a [crate::site::render::Heading],
         toc_label: &'a str,
+        pager: &'a str,
     ) -> Page<'a> {
         Page {
             title: &self.title,
@@ -43,12 +45,19 @@ impl Rendered<'_> {
             listing: self.listing,
             view: self.view.clone(),
             actions: &self.actions,
+            pager,
             headings,
             toc_label,
             syntax: false,
             math: false,
             mermaid: false,
         }
+    }
+
+    /// The bar of previous and next files for this path.
+    fn pager(&self) -> String {
+        let (previous, next) = self.listing.neighbours(self.current);
+        pager::nav(previous, next)
     }
 }
 
@@ -58,8 +67,8 @@ pub fn document(context: &Rendered<'_>, document: &Document) -> String {
     let mut body = String::from("<article class=\"md\">");
     body.push_str(&document.html);
     body.push_str("</article>");
-    body.push_str(&siblings(context));
-    let mut page = context.page(&document.headings, ON_THIS_PAGE);
+    let pager = context.pager();
+    let mut page = context.page(&document.headings, ON_THIS_PAGE, &pager);
     page.syntax = document.has_syntax;
     page.math = document.has_math;
     page.mermaid = document.has_mermaid;
@@ -72,8 +81,8 @@ pub fn notebook(context: &Rendered<'_>, rendered: &crate::site::notebook::Render
     let mut body = String::from("<article class=\"md nb\">");
     body.push_str(&rendered.html);
     body.push_str("</article>");
-    body.push_str(&siblings(context));
-    let mut page = context.page(&rendered.headings, IN_THIS_NOTEBOOK);
+    let pager = context.pager();
+    let mut page = context.page(&rendered.headings, IN_THIS_NOTEBOOK, &pager);
     page.syntax = rendered.has_syntax;
     page.math = rendered.has_math;
     page.mermaid = rendered.has_mermaid;
@@ -99,7 +108,8 @@ pub fn source(
         size_label(size)
     );
     body.push_str(&source_view(source, highlighted, &kind(context.current)));
-    let mut page = context.page(&[], ON_THIS_PAGE);
+    let pager = context.pager();
+    let mut page = context.page(&[], ON_THIS_PAGE, &pager);
     page.syntax = highlighted.is_some();
     shell::page(&page, &body)
 }
@@ -116,7 +126,28 @@ pub fn binary(context: &Rendered<'_>, size: usize) -> String {
         size_label(size),
         href(context.current)
     );
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, &context.pager()), &body)
+}
+
+/// An image, shown in the page rather than in the browser's own viewer.
+#[must_use]
+pub fn image(context: &Rendered<'_>, size: usize) -> String {
+    let name = context
+        .current
+        .rsplit('/')
+        .next()
+        .unwrap_or(context.current);
+    let mut body = String::new();
+    let _ = write!(body, "<p class=\"meta\">{}</p>", size_label(size));
+    let _ = write!(
+        body,
+        "<figure class=\"figure\"><a href=\"/{}?raw=1\" title=\"Open the original\">\
+         <img src=\"/{}?raw=1\" alt=\"{}\"></a></figure>",
+        href(context.current),
+        href(context.current),
+        escape(name)
+    );
+    shell::page(&context.page(&[], ON_THIS_PAGE, &context.pager()), &body)
 }
 
 /// The landing page and every directory listing.
@@ -167,7 +198,7 @@ pub fn directory(context: &Rendered<'_>, directory: &TreeNode) -> String {
         }
         body.push_str("</ul>");
     }
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, ""), &body)
 }
 
 /// Search results for one query.
@@ -200,7 +231,7 @@ pub fn search(context: &Rendered<'_>, query: &str, matches: &[&str]) -> String {
         }
         body.push_str("</ul>");
     }
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, ""), &body)
 }
 
 /// A path that the index does not list.
@@ -212,7 +243,7 @@ pub fn not_found(context: &Rendered<'_>, path: &str) -> String {
          <p><a href=\"/\">Back to the root</a></p>",
         escape(path)
     );
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, ""), &body)
 }
 
 /// The prompt shown when a token is configured and the request carries none.
@@ -227,7 +258,7 @@ enterkeyhint=\"go\" required>\n\
 <button type=\"submit\">Open</button>\n\
 </form>"
         .to_string();
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, ""), &body)
 }
 
 /// The note a page shows when the filter hides everything.
@@ -258,7 +289,7 @@ pub fn empty_filter(context: &Rendered<'_>) -> String {
          <p>Every file type is unticked, so the tree and the pages show nothing.</p>\n\
          {link}"
     );
-    shell::page(&context.page(&[], ON_THIS_PAGE), &body)
+    shell::page(&context.page(&[], ON_THIS_PAGE, ""), &body)
 }
 
 /// The kind of a file, from its extension.
@@ -267,32 +298,6 @@ fn kind(name: &str) -> String {
         Some((_, extension)) if !extension.is_empty() => extension.to_ascii_lowercase(),
         _ => "file".to_string(),
     }
-}
-
-/// Links to the files either side of this one, in tree order.
-fn siblings(context: &Rendered<'_>) -> String {
-    let (previous, next) = context.listing.neighbours(context.current);
-    if previous.is_none() && next.is_none() {
-        return String::new();
-    }
-    let mut output = String::from("<nav class=\"siblings\" aria-label=\"Previous and next file\">");
-    output.push_str(&sibling(previous, "previous"));
-    output.push_str(&sibling(next, "next"));
-    output.push_str("</nav>");
-    output
-}
-
-fn sibling(path: Option<&str>, class: &str) -> String {
-    let Some(path) = path else {
-        return "<span></span>".to_string();
-    };
-    let label = if class == "next" { "Next" } else { "Previous" };
-    let name = path.rsplit('/').next().unwrap_or(path);
-    format!(
-        "<a class=\"{class}\" href=\"/{}\"><span>{label}</span><strong>{}</strong></a>",
-        href(path),
-        escape(name)
-    )
 }
 
 #[cfg(test)]
@@ -314,6 +319,7 @@ mod tests {
                 theme: Theme::Auto,
                 extensions: Extensions::parse("md"),
                 reading: false,
+                width: config.reading_width,
                 config,
             },
             current: "README.md",

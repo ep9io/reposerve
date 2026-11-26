@@ -25,6 +25,8 @@ pub struct View<'a> {
     pub extensions: Extensions,
     /// Whether the reader hid the chrome.
     pub reading: bool,
+    /// The width of the reading column, in `rem`.
+    pub width: u16,
     /// The configuration this server runs with.
     pub config: &'a Config,
 }
@@ -41,6 +43,8 @@ pub struct Page<'a> {
     pub view: View<'a>,
     /// The controls that belong to this page, at the right of the breadcrumb.
     pub actions: &'a str,
+    /// The bar of previous and next files, or an empty string.
+    pub pager: &'a str,
     /// The headings of the page, for the table of contents.
     pub headings: &'a [Heading],
     /// What the table of contents holds: a page, or a notebook.
@@ -94,19 +98,17 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
     let toc = if page.view.config.toc && page.headings.len() > 1 {
         toc::aside(page.headings, page.toc_label)
     } else {
+        // An empty column still holds the space, so the tree and the text do not
+        // move when the reader opens a page without a table of contents.
         String::new()
-    };
-    let shell = if toc.is_empty() {
-        "shell no-toc"
-    } else {
-        "shell"
     };
     let reading_class = if page.view.reading { "on" } else { "off" };
     let theme_menu = theme_links(page.view.theme, &next_target);
+    let width_menu = width_links(page.view.width, &next_target);
 
     format!(
         "<!DOCTYPE html>\n\
-<html lang=\"en\" data-theme=\"{theme}\" data-reading=\"{reading}\">\n\
+<html lang=\"en\" data-theme=\"{theme}\" data-reading=\"{reading}\" data-live=\"{live}\" style=\"--measure:{measure}rem\">\n\
 <head>\n\
 <meta charset=\"utf-8\">\n\
 <meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">\n\
@@ -115,7 +117,6 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
 <meta name=\"theme-color\" content=\"#0f1115\" media=\"(prefers-color-scheme: dark)\">\n\
 <meta name=\"description\" content=\"{description}\">\n\
 <title>{title}</title>\n\
-<style>:root{{--measure:{measure}rem}}</style>\n\
 <link rel=\"stylesheet\" href=\"{stylesheet}\">\n\
 {highlight}\n\
 <link rel=\"icon\" href=\"{icon}\" type=\"image/svg+xml\">\n\
@@ -130,15 +131,17 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
 <input type=\"search\" name=\"q\" placeholder=\"Find a file\" aria-label=\"Find a file in the repository\" autocomplete=\"off\" spellcheck=\"false\" enterkeyhint=\"search\">\n\
 </form>\n\
 <details class=\"menu theme-menu\">\n\
-<summary class=\"icon-button\" role=\"button\" aria-label=\"Theme: {theme_label}\" title=\"Theme: {theme_label}\">{theme_icon}</summary>\n\
-<div class=\"menu-list\" role=\"group\" aria-label=\"Colour scheme\">\n\
+<summary class=\"icon-button\" role=\"button\" aria-label=\"Appearance: {theme_label}\" title=\"Appearance: {theme_label}\">{theme_icon}</summary>\n\
+<div class=\"menu-list\" role=\"group\" aria-label=\"Appearance\">\n\
 {theme_links}\n\
+<div class=\"width-group\"><p class=\"menu-label\">Reading width</p>\n\
+{width_links}</div>\n\
 </div>\n\
 </details>\n\
 <button class=\"icon-button\" id=\"reading-toggle\" type=\"button\" aria-pressed=\"{reading}\" aria-label=\"Reading mode\" title=\"Reading mode (f)\">{reading_icon}</button>\n\
 <label class=\"icon-button nav-button\" for=\"nav-toggle\" aria-label=\"Show the file list\" title=\"File list\">{files_icon}</label>\n\
 </header>\n\
-<div class=\"{shell}\">\n\
+<div class=\"shell\">\n\
 <nav class=\"nav\" id=\"nav\" aria-label=\"Repository files\">\n\
 <p class=\"nav-label\">Files</p>\n\
 {filter}\n\
@@ -147,10 +150,10 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
 <main id=\"main\" tabindex=\"-1\">\n\
 <div class=\"page-head\">{crumbs}{actions}</div>\n\
 {body}\n\
-<footer class=\"page-foot\"><a href=\"/\">All files</a></footer>\n\
 </main>\n\
 {toc}\n\
 </div>\n\
+{pager}\n\
 <div class=\"reader\" id=\"reader\">\n\
 <details class=\"menu reader-menu\">\n\
 <summary class=\"icon-button reader-button\" role=\"button\" aria-label=\"Reader options\" title=\"Reader options\">{reader_icon}</summary>\n\
@@ -158,10 +161,12 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
 <a class=\"reader-leave\" href=\"/reading/off?next={next_target}\"><span>Leave reading mode</span><kbd>f</kbd></a>\n\
 <p class=\"menu-label\">Colour scheme</p>\n\
 {theme_menu}\n\
+<div class=\"width-group\"><p class=\"menu-label\">Reading width</p>\n\
+{width_menu}</div>\n\
 </div>\n\
 </details>\n\
 </div>\n\
-<div class=\"chip\" id=\"update-chip\" hidden>This file changed. <button type=\"button\" data-reload>Reload</button></div>\n\
+<div class=\"chip\" id=\"update-chip\" hidden><span id=\"update-text\">This file changed.</span> <button type=\"button\" id=\"update-action\" data-action=\"reload\">Reload</button></div>\n\
 <div class=\"findbar\" id=\"findbar\" hidden>\n\
 <label for=\"find-input\">Find in page</label>\n\
 <input id=\"find-input\" type=\"search\" autocomplete=\"off\" spellcheck=\"false\" enterkeyhint=\"search\">\n\
@@ -180,8 +185,13 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
 </html>\n",
         theme = page.view.theme.value(),
         reading = reading_class,
+        live = if page.view.config.live_reload {
+            "on"
+        } else {
+            "off"
+        },
         description = escape(&format!("{} files from {}", page.listing.len(), page.view.config.title)),
-        measure = page.view.config.reading_width,
+        measure = page.view.width,
         stylesheet = assets::url(assets::APP_CSS),
         icon = assets::url(assets::ICON),
         script = assets::url(assets::APP_JS),
@@ -190,12 +200,14 @@ pub fn page(page: &Page<'_>, body: &str) -> String {
         reading_icon = reading_icon(),
         files_icon = files_icon(),
         theme_links = theme_menu,
+        width_links = width_menu,
         reader_icon = reader_icon(),
         next_target = next_target,
         filter = sidebar::filter(&page.view, page.listing, page.current),
         tree = sidebar::tree(page.listing, page.current),
         crumbs = breadcrumb(page.current),
         actions = page.actions,
+        pager = page.pager,
         body = body,
         toc = toc,
         scripts = scripts,
@@ -216,6 +228,35 @@ fn theme_links(current: Theme, target: &str) -> String {
             "<a href=\"/theme/{}?next={target}\" class=\"theme-option\"{marked}>{}</a>",
             theme.value(),
             theme.label()
+        );
+    }
+    output
+}
+
+/// The widths the appearance menu offers, in the order it shows them.
+const WIDTHS: [(u16, &str); 3] = [(46, "Standard"), (56, "Wide"), (68, "Widest")];
+
+fn width_links(current: u16, target: &str) -> String {
+    let mut choices: Vec<(u16, String)> = WIDTHS
+        .iter()
+        .map(|(rem, label)| (*rem, (*label).to_string()))
+        .collect();
+    // A configured width outside the presets still gets a marked entry.
+    if !choices.iter().any(|(rem, _)| *rem == current) {
+        choices.push((current, format!("{current} rem")));
+        choices.sort_by_key(|(rem, _)| *rem);
+    }
+    let mut output = String::new();
+    for (rem, label) in choices {
+        let marked = if rem == current {
+            " aria-current=\"true\""
+        } else {
+            ""
+        };
+        let _ = write!(
+            output,
+            "<a href=\"/width/{rem}?next={target}\"{marked}>{}</a>",
+            escape(&label)
         );
     }
     output
@@ -309,6 +350,22 @@ mod tests {
     }
 
     #[test]
+    fn the_width_menu_marks_the_current_choice() {
+        let links = width_links(56, "%2Fdocs");
+        assert!(links.contains("href=\"/width/46?next=%2Fdocs\""), "{links}");
+        assert!(links.contains("aria-current=\"true\">Wide<"), "{links}");
+        assert_eq!(links.matches("aria-current").count(), 1, "{links}");
+        assert!(links.contains(">Widest<"), "{links}");
+    }
+
+    #[test]
+    fn a_configured_width_outside_the_presets_is_shown() {
+        let links = width_links(80, "%2Fdocs");
+        assert!(links.contains("href=\"/width/80?next=%2Fdocs\""), "{links}");
+        assert!(links.contains("aria-current=\"true\">80 rem<"), "{links}");
+    }
+
+    #[test]
     fn a_reading_width_reaches_the_page() {
         let index = listing();
         let config = Config {
@@ -325,9 +382,11 @@ mod tests {
                     theme: Theme::Auto,
                     extensions: Extensions::parse("md"),
                     reading: false,
+                    width: config.reading_width,
                     config: &config,
                 },
                 actions: "",
+                pager: "",
                 headings: &[],
                 toc_label: "On this page",
                 syntax: false,
@@ -339,7 +398,49 @@ mod tests {
         assert!(page.contains("--measure:52rem"), "{page}");
         assert!(page.contains("data-theme=\"auto\""), "{page}");
         assert!(page.contains("data-reading=\"off\""), "{page}");
+        assert!(
+            page.contains("data-live=\"on\""),
+            "the script needs to know whether a change reloads the page: {page}"
+        );
+        assert!(
+            page.contains("class=\"shell\""),
+            "a page without headings keeps the same columns: {page}"
+        );
+        assert!(!page.contains("no-toc"), "{page}");
         assert!(page.contains("class=\"skip\""), "{page}");
+    }
+
+    #[test]
+    fn automatic_reload_off_reaches_the_page() {
+        let index = listing();
+        let config = Config {
+            live_reload: false,
+            ..Config::default()
+        };
+        let listing = index.listing(&Extensions::parse("md"));
+        let page = page(
+            &Page {
+                title: "t",
+                current: "README.md",
+                listing: &listing,
+                view: View {
+                    theme: Theme::Auto,
+                    extensions: Extensions::parse("md"),
+                    reading: false,
+                    width: config.reading_width,
+                    config: &config,
+                },
+                actions: "",
+                pager: "",
+                headings: &[],
+                toc_label: "On this page",
+                syntax: false,
+                math: false,
+                mermaid: false,
+            },
+            "<p>body</p>",
+        );
+        assert!(page.contains("data-live=\"off\""), "{page}");
     }
 
     #[test]
@@ -356,9 +457,11 @@ mod tests {
                     theme: Theme::Auto,
                     extensions: Extensions::parse("md"),
                     reading: true,
+                    width: config.reading_width,
                     config: &config,
                 },
                 actions: "",
+                pager: "",
                 headings: &[],
                 toc_label: "On this page",
                 syntax: false,

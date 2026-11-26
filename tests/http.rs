@@ -40,12 +40,20 @@ fn site() -> (tempfile::TempDir, Arc<AppState>) {
 }
 
 async fn get(state: &Arc<AppState>, uri: &str) -> (StatusCode, axum::http::HeaderMap, String) {
-    let request = Request::builder()
-        .uri(uri)
-        .body(Body::empty())
-        .expect("a request");
+    get_with(state, uri, &[]).await
+}
+
+async fn get_with(
+    state: &Arc<AppState>,
+    uri: &str,
+    headers: &[(&str, &str)],
+) -> (StatusCode, axum::http::HeaderMap, String) {
+    let mut request = Request::builder().uri(uri);
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
     let response = reposerve::web::routes::router(Arc::clone(state))
-        .oneshot(request)
+        .oneshot(request.body(Body::empty()).expect("a request"))
         .await
         .expect("a response");
     let status = response.status();
@@ -78,6 +86,14 @@ async fn the_root_shows_its_readme() {
         "the front matter names the page: {body}"
     );
     assert!(body.contains("class=\"tree\""), "{body}");
+    assert!(
+        body.contains("class=\"pager\""),
+        "the file next to this one stays in reach at the foot of the page: {body}"
+    );
+    assert!(
+        !body.contains(">All files<"),
+        "the breadcrumb reaches the root, so the foot carries no second link: {body}"
+    );
 }
 
 #[tokio::test]
@@ -193,6 +209,30 @@ async fn the_filter_cookie_narrows_the_tree() {
     let body = String::from_utf8_lossy(&bytes);
     assert!(body.contains("note.txt"), "{body}");
     assert!(!body.contains("guide.md"), "{body}");
+}
+
+#[tokio::test]
+async fn the_width_cookie_sets_the_reading_column() {
+    let (_directory, state) = site();
+    let (status, _headers, body) = get_with(
+        &state,
+        "/docs/guide.md",
+        &[(header::COOKIE.as_str(), "reposerve_width=68")],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("--measure:68rem"), "{body}");
+
+    let (_status, _headers, fallback) = get_with(
+        &state,
+        "/docs/guide.md",
+        &[(header::COOKIE.as_str(), "reposerve_width=999")],
+    )
+    .await;
+    assert!(
+        fallback.contains("--measure:46rem"),
+        "a width outside the range falls back to the configuration: {fallback}"
+    );
 }
 
 #[tokio::test]
