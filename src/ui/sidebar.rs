@@ -131,6 +131,27 @@ fn type_name(extension: &str) -> String {
     .to_string()
 }
 
+/// Every file type the filter can offer: the types the repository holds, plus
+/// each configured preset.
+#[must_use]
+pub fn offered(listing: &Listing<'_>, view: &View<'_>) -> BTreeMap<String, usize> {
+    let mut types = listing.type_counts();
+    for preset in &view.config.presets {
+        types.entry(preset.clone()).or_insert(0);
+    }
+    types
+}
+
+/// The document types among `types`, in name order.
+#[must_use]
+pub fn document_types(types: &BTreeMap<String, usize>) -> Vec<String> {
+    types
+        .keys()
+        .filter(|extension| shelf(extension) == Shelf::Documents)
+        .cloned()
+        .collect()
+}
+
 /// The filter form: which file types the tree and the pages show.
 ///
 /// The form offers every type the repository holds, on three shelves. Documents
@@ -148,12 +169,7 @@ pub fn filter(view: &View<'_>, listing: &Listing<'_>, current: &str) -> String {
         count => format!("Showing <strong>{count} types</strong>"),
     };
 
-    // Every type the repository holds, plus each configured preset, so a quick
-    // choice stays on the form even before a file of that type exists.
-    let mut types = listing.type_counts();
-    for preset in &view.config.presets {
-        types.entry(preset.clone()).or_insert(0);
-    }
+    let types = offered(listing, view);
     let offered: Vec<String> = types.keys().cloned().collect();
 
     let mut shelves: BTreeMap<Shelf, Vec<(String, usize)>> = BTreeMap::new();
@@ -198,6 +214,19 @@ pub fn filter(view: &View<'_>, listing: &Listing<'_>, current: &str) -> String {
         output.push_str("</div></fieldset>");
     }
 
+    // A reader can pick every document type at once. The list comes from the
+    // types the repository holds, so a document type that is not Markdown is
+    // still included.
+    let documents = document_types(&types);
+    let documents_link = if documents.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<a href=\"/filter/apply?ext={}&next={target}\">Documents only</a>",
+            escape(&documents.join(","))
+        )
+    };
+
     // A reader can add a type that the shelves do not offer.
     let custom = view.extensions.custom(&offered);
     let _ = write!(
@@ -207,7 +236,7 @@ pub fn filter(view: &View<'_>, listing: &Listing<'_>, current: &str) -> String {
          spellcheck=\"false\"></label>\
          <div class=\"filter-actions\"><button type=\"submit\">Apply</button>\
          <div class=\"filter-links\">\
-         <a href=\"/filter/apply?ext=md&next={target}\">Markdown only</a>\
+         {documents_link}\
          <a href=\"/filter/apply?next={target}\">Nothing</a></div></div>\
          <p class=\"note\">A file with no extension is never shown. A page loads its \
          images and fonts whatever the filter says.</p>\
@@ -313,6 +342,36 @@ mod tests {
             "a hidden type is still offered: {html}"
         );
         assert!(html.contains(">JSON<"), "{html}");
+    }
+
+    #[test]
+    fn the_filter_offers_every_document_type_at_once() {
+        let config = Config::default();
+        let index =
+            RepoIndex::from_listing(Path::new("."), &["a.md", "b.ipynb", "c.rs", "d.json"], &[]);
+        let listing = index.listing(&Extensions::parse("md"));
+        let html = filter(&view(&config, "md"), &listing, "");
+        assert!(html.contains(">Documents only<"), "{html}");
+        assert!(
+            html.contains("?ext=ipynb,md&next="),
+            "the link names every document type and no other: {html}"
+        );
+        assert!(
+            !html.contains("Markdown only"),
+            "Documents only replaces the narrower shortcut: {html}"
+        );
+    }
+
+    #[test]
+    fn the_filter_hides_documents_only_when_there_is_no_document_type() {
+        let config = Config {
+            presets: Vec::new(),
+            ..Config::default()
+        };
+        let index = RepoIndex::from_listing(Path::new("."), &["a.rs", "b.json"], &[]);
+        let listing = index.listing(&Extensions::parse("md"));
+        let html = filter(&view(&config, "md"), &listing, "");
+        assert!(!html.contains("Documents only"), "{html}");
     }
 
     #[test]

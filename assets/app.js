@@ -775,15 +775,6 @@
       });
     }
 
-    var filterForm = document.querySelector(".filter form");
-    if (filterForm) {
-      filterForm.addEventListener("change", function (event) {
-        if (event.target.type === "checkbox") {
-          filterForm.submit();
-        }
-      });
-    }
-
     var libraries = document.querySelectorAll("script[data-lib]");
     for (var index = 0; index < libraries.length; index += 1) {
       libraries[index].addEventListener("load", startLibraries);

@@ -10,6 +10,7 @@ use crate::site::index::{Listing, TreeNode};
 use crate::site::render::{source_view, Document};
 
 use super::shell::{self, Page, View};
+use super::sidebar;
 
 /// The label above the contents of a document.
 const ON_THIS_PAGE: &str = "On this page";
@@ -232,10 +233,31 @@ enterkeyhint=\"go\" required>\n\
 /// The note a page shows when the filter hides everything.
 #[must_use]
 pub fn empty_filter(context: &Rendered<'_>) -> String {
-    let body = "<h1>No file type is shown</h1>\n\
-<p>Every file type is unticked, so the tree and the pages show nothing.</p>\n\
-<p><a href=\"/filter/apply?ext=md&amp;next=/\">Show Markdown</a></p>"
-        .to_string();
+    let types = sidebar::offered(context.listing, &context.view);
+    let documents = sidebar::document_types(&types);
+    // Documents are what a reader comes for. A repository with none still gets
+    // a way out of an empty filter.
+    let (label, extensions) = if documents.is_empty() {
+        (
+            "Show every type",
+            types.keys().cloned().collect::<Vec<String>>(),
+        )
+    } else {
+        ("Show Documents", documents)
+    };
+    let link = if extensions.is_empty() {
+        String::new()
+    } else {
+        format!(
+            "<p><a href=\"/filter/apply?ext={}&amp;next=/\">{label}</a></p>",
+            escape(&extensions.join(","))
+        )
+    };
+    let body = format!(
+        "<h1>No file type is shown</h1>\n\
+         <p>Every file type is unticked, so the tree and the pages show nothing.</p>\n\
+         {link}"
+    );
     shell::page(&context.page(&[], ON_THIS_PAGE), &body)
 }
 
@@ -335,6 +357,10 @@ mod tests {
         let config = Config::default();
         let html = empty_filter(&context(&listing, &config));
         assert!(html.contains("No file type is shown"), "{html}");
-        assert!(html.contains("Show Markdown"), "{html}");
+        assert!(html.contains("Show Documents"), "{html}");
+        assert!(
+            html.contains("ext=ipynb,md&amp;next=/"),
+            "the offer names every document type: {html}"
+        );
     }
 }
