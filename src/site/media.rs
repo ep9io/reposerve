@@ -23,6 +23,12 @@ pub fn content_type(path: &str) -> Option<&'static str> {
     }
 }
 
+/// Whether a path is an image the page can show.
+#[must_use]
+pub fn is_image(path: &str) -> bool {
+    content_type(path).is_some_and(|kind| kind.starts_with("image/"))
+}
+
 /// Whether a path is a notebook.
 #[must_use]
 pub fn is_notebook(path: &str) -> bool {
@@ -63,5 +69,8 @@ mod tests {
         assert!(!is_markdown("crates/main.rs"));
         assert!(is_notebook("analysis/report.IPYNB"));
         assert!(!is_notebook("docs/README.md"));
+        assert!(is_image("media/chart.png"));
+        assert!(is_image("media/logo.SVG"));
+        assert!(!is_image("docs/manual.pdf"));
     }
 }

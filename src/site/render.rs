@@ -198,6 +198,26 @@ fn prepare<'a>(
             continue;
         }
 
+        // An image is shown by the page, but the address names the image. An
+        // image the filter hides answers `raw=1` alone, so the source asks for
+        // the bytes.
+        if let Event::Start(Tag::Image {
+            link_type,
+            dest_url,
+            title,
+            id,
+        }) = event
+        {
+            output.push(Event::Start(Tag::Image {
+                link_type: *link_type,
+                dest_url: image_source(dest_url).into(),
+                title: title.clone(),
+                id: id.clone(),
+            }));
+            position += 1;
+            continue;
+        }
+
         output.push(event.clone());
         position += 1;
     }
@@ -380,10 +400,37 @@ fn split_front_matter(source: &str) -> (Option<String>, &str) {
     (title, body)
 }
 
+/// The address an image should load from.
+///
+/// A relative or root-relative image names a page route, and a page route
+/// returns HTML. `raw=1` asks for the bytes, so the picture loads whether or
+/// not the filter lists its type. An address on another site is left alone.
+fn image_source(destination: &str) -> String {
+    let external = destination.starts_with("http://")
+        || destination.starts_with("https://")
+        || destination.starts_with("//")
+        || destination.starts_with("data:")
+        || destination.starts_with('#')
+        || destination.contains("raw=1");
+    if external {
+        return destination.to_string();
+    }
+    let (path, fragment) = match destination.split_once('#') {
+        Some((path, fragment)) => (path, Some(fragment)),
+        None => (destination, None),
+    };
+    let separator = if path.contains('?') { '&' } else { '?' };
+    match fragment {
+        Some(fragment) => format!("{path}{separator}raw=1#{fragment}"),
+        None => format!("{path}{separator}raw=1"),
+    }
+}
+
 /// Adds the attributes that keep an image from loading before it is needed.
 fn finish(html: &mut String) {
     if html.contains("<img ") {
         *html = html.replace("<img ", "<img loading=\"lazy\" decoding=\"async\" ");
+        *html = inline_image_sources(html);
     }
     // A link to another site opens in a new tab, so the reader keeps the page.
     if html.contains("<a href=\"http") {
@@ -392,6 +439,49 @@ fn finish(html: &mut String) {
             "<a rel=\"noopener noreferrer\" target=\"_blank\" href=\"http",
         );
     }
+}
+
+/// Rewrites the source of an image written as raw HTML in the Markdown.
+///
+/// A raw `<img>` does not pass through the event walker, so it needs the same
+/// `raw=1` as an image written with Markdown syntax.
+fn inline_image_sources(html: &str) -> String {
+    let mut output = String::with_capacity(html.len() + 16);
+    let mut rest = html;
+    while let Some(index) = rest.find("<img ") {
+        let (head, tag) = rest.split_at(index);
+        output.push_str(head);
+        let end = tag.find('>').map_or(tag.len(), |end| end + 1);
+        output.push_str(&rewrite_source(&tag[..end]));
+        rest = &tag[end..];
+    }
+    output.push_str(rest);
+    output
+}
+
+/// One `<img>` tag, with `src` pointed at the bytes when it is a local file.
+fn rewrite_source(tag: &str) -> String {
+    for quote in ['"', '\''] {
+        let needle = format!("src={quote}");
+        let Some(start) = tag.find(&needle) else {
+            continue;
+        };
+        let value_start = start + needle.len();
+        let Some(length) = tag[value_start..].find(quote) else {
+            return tag.to_string();
+        };
+        let value = &tag[value_start..value_start + length];
+        let replaced = image_source(value);
+        if replaced == value {
+            return tag.to_string();
+        }
+        let mut output = String::with_capacity(tag.len() + 8);
+        output.push_str(&tag[..value_start]);
+        output.push_str(&replaced);
+        output.push_str(&tag[value_start + length..]);
+        return output;
+    }
+    tag.to_string()
 }
 
 /// Renders a source file as numbered lines, with the markup escaped.
@@ -636,11 +726,23 @@ mod tests {
             document.html
         );
         assert!(
+            document.html.contains("src=\"shot.png?raw=1\""),
+            "the page serves a picture, so the source asks for the bytes: {}",
+            document.html
+        );
+        assert!(
             document.html.contains(
                 "<a rel=\"noopener noreferrer\" target=\"_blank\" href=\"https://example.com\">"
             ),
             "{}",
             document.html
+        );
+
+        let raw = render("<img src=\"cover.png\" alt=\"cover\">\n");
+        assert!(
+            raw.html.contains("src=\"cover.png?raw=1\""),
+            "raw HTML needs the same raw address: {}",
+            raw.html
         );
     }
 

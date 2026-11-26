@@ -97,6 +97,31 @@ async fn the_root_shows_its_readme() {
 }
 
 #[tokio::test]
+async fn an_image_is_a_page_and_its_raw_address_serves_the_bytes() {
+    let (_directory, state) = site();
+    let (status, headers, body) = get_with(
+        &state,
+        "/logo.png",
+        &[(header::COOKIE.as_str(), "reposerve_ext=png")],
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(
+        headers.get(header::CONTENT_TYPE).unwrap(),
+        "text/html; charset=utf-8"
+    );
+    assert!(
+        body.contains("<img src=\"/logo.png?raw=1\""),
+        "the page shows the picture from its raw address: {body}"
+    );
+    assert!(body.contains(">Original<"), "{body}");
+
+    let (status, headers, _body) = get(&state, "/logo.png?raw=1").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(headers.get(header::CONTENT_TYPE).unwrap(), "image/png");
+}
+
+#[tokio::test]
 async fn an_unknown_path_is_a_page_not_a_crash() {
     let (_directory, state) = site();
     let (status, _headers, body) = get(&state, "/missing.md").await;

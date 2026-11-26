@@ -318,6 +318,15 @@ pub fn source_action(path: &str) -> String {
     )
 }
 
+/// The link that opens a file the server cannot show, such as an image.
+#[must_use]
+pub fn original_action(path: &str) -> String {
+    format!(
+        "<a class=\"action\" href=\"/{}?raw=1\" title=\"Open the stored file\">Original</a>",
+        href(path)
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

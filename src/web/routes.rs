@@ -540,6 +540,13 @@ fn file_answer(
     if media::is_markdown(path) {
         return document_answer(listing, path, view);
     }
+    if media::is_image(path) {
+        let bytes = listing.read(path)?;
+        let size = bytes.len();
+        let mut context = context(listing, view, path, &file_title(path));
+        context.actions = ui::shell::original_action(path);
+        return Ok((StatusCode::OK, Body::Html(ui::views::image(&context, size))));
+    }
     if let Some(content_type) = media::content_type(path) {
         let bytes = listing.read(path)?;
         return Ok((StatusCode::OK, Body::Bytes(content_type, bytes)));
