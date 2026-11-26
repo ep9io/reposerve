@@ -7,7 +7,6 @@ authors     = ["Tristan Everitt <tristan.ecwhz@9epochs.com>"]
 description = "Serve a repository's Markdown, source files and notebooks to a browser on the local network"
 license     = "MIT"
 repository  = "https://github.com/ep9io/reposerve"
-homepage    = "https://github.com/ep9io/reposerve"
 readme        = "README.md"
 documentation = "https://docs.rs/reposerve"
 keywords    = ["markdown", "documentation", "server", "browser", "notebook"]
