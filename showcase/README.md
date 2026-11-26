@@ -15,10 +15,10 @@ list, or change it in the sidebar.
 | Path | Shows |
 | --- | --- |
 | `markdown/prose.md` | Headings, tables, task lists, footnotes, callouts, math, a diagram, an image and fenced code. |
-| `markdown/notes.md` | A short second page, so the previous and next links have a target. |
+| `markdown/notes.md` | A short second page, so the previous and next bar has a target. |
 | `code/` | Six source types, highlighted: Rust, Python, JavaScript, SQL, TOML and JSON. |
 | `notebooks/analysis.ipynb` | Markdown cells, math, a table, a chart, a diagram and a traceback. |
-| `media/` | An SVG and a PNG, served as bytes. |
+| `media/` | An SVG and a PNG, each shown on a page with its size and a link to the original. |
 | `plain.txt` | A text file, shown as plain text. |
 
 ## Samples are real

@@ -19,7 +19,10 @@ diagram drawn in the page, beside the file tree and the notebook outline](https:
 - Draws Mermaid diagrams and renders math with KaTeX.
 - Offers a light, a dark and a system colour scheme.
 - Finds a file by name, and finds text inside the open page.
-- Moves to the file above or below in the same folder.
+- Moves to the file above or below in the same folder, from a bar that stays at
+  the foot of the page.
+- Shows an image in a page of its own: its size, the picture and a link to the
+  original.
 - Filters the tree by file extension.
 - Reloads a page when a file changes, and keeps the reader's place.
 - Hides the chrome in reading mode.
@@ -59,7 +62,11 @@ Serving 214 files from /home/you/project
 
 A directory that holds a `README.md` opens on that file. The default filter shows
 Markdown alone. Open the filter in the sidebar to add source files, notebooks or
-images. The choice is a cookie, so each device keeps its own.
+images, then press Apply. The choice is a cookie, so each device keeps its own.
+
+On a wide screen the appearance menu also offers a reading width: Standard,
+Wide or Widest. The choice is a cookie, so each device keeps its own. On a
+phone or tablet the column still fills the window.
 
 ### Options
 
@@ -79,7 +86,7 @@ images. The choice is a cookie, so each device keeps its own.
 | `--hidden`                | off            | Show entries whose name starts with a dot    |
 | `--open`                  | off            | Open a browser at start                      |
 | `-c, --config <FILE>`     | none           | Read a configuration file                    |
-| `--no-live-reload`        | off            | Do not reload a page when a file changes     |
+| `--no-live-reload`        | off            | Do not reload a page automatically           |
 | `--show-config`           | off            | Print the resolved configuration and exit    |
 
 A value on the command line wins over the file, and the file wins over the
@@ -139,9 +146,19 @@ and `.env` never appear. Add `--hidden` or `hidden = true` to show them, except
 
 The server watches the root. When a file changes, it tells each open page which
 path changed. A page reloads only when its own file changed, and it returns to
-the same place on the page. A change elsewhere shows a short notice.
+the same place on the page. The new page shows a short notice, which fades after
+a few seconds or closes on Dismiss.
 
-Turn it off with `--no-live-reload` or `live_reload = false`.
+An editor's swap, backup and probe files do not count as changes: typing in `vi`
+does nothing until the file is written. Hidden entries and paths outside the
+served set are ignored too.
+
+A change elsewhere shows a notice with a Reload button, so the reader can refresh
+the tree when convenient.
+
+Turn automatic reload off with `--no-live-reload` or `live_reload = false`. The
+server still watches: the notice stays, and the button reloads only when the
+reader asks.
 
 ## Security
 
