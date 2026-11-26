@@ -99,7 +99,6 @@ pub fn source(
 ) -> String {
     let lines = source.lines().count();
     let mut body = String::new();
-    let _ = write!(body, "<h1>{}</h1>", escape(context.current));
     let _ = write!(
         body,
         "<p class=\"meta\">{} {} · {}</p>",
@@ -118,7 +117,6 @@ pub fn source(
 #[must_use]
 pub fn binary(context: &Rendered<'_>, size: usize) -> String {
     let mut body = String::new();
-    let _ = write!(body, "<h1>{}</h1>", escape(context.current));
     let _ = write!(
         body,
         "<p class=\"meta\">{}. This file is not text, so the server does not display it.</p>\
@@ -354,6 +352,19 @@ mod tests {
         let html = directory(&context, listing.tree());
         assert!(html.contains("2 files in this repository"), "{html}");
         assert!(html.contains("class=\"kind\">directory<"), "{html}");
+    }
+
+    #[test]
+    fn a_file_page_does_not_repeat_its_path_as_a_heading() {
+        let index = index();
+        let listing = index.listing(&Extensions::parse("md"));
+        let config = Config::default();
+        let mut context = context(&listing, &config);
+        context.current = "docs/lib.rs";
+        assert!(!source(&context, "fn main() {}\n", None, 15).contains("<h1>"));
+        assert!(!binary(&context, 15).contains("<h1>"));
+        context.current = "media/chart.png";
+        assert!(!image(&context, 15).contains("<h1>"));
     }
 
     #[test]
