@@ -6,8 +6,8 @@ local network.
 `reposerve` is for reading a repository away from the desk: on a phone, a tablet
 or a second machine. Start it with one command. Open the address it prints.
 
-![The reading mode on a desktop: a file tree, a Markdown page with a table and
-code, and a table of contents](https://raw.githubusercontent.com/ep9io/reposerve/main/docs/screenshot.png)
+![A notebook in the browser: a formula, a Python cell with its output, and a
+diagram drawn in the page, beside the file tree and the notebook outline](https://raw.githubusercontent.com/ep9io/reposerve/main/docs/screenshot.png)
 
 ## What it does
 
