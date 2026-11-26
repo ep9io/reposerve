@@ -26,6 +26,19 @@
 | `just package` | A publish dry run                                  |
 
 
+## Releases
+
+A release is four small steps.
+
+1. Give the entries under `Unreleased` in `CHANGELOG.md` a version and a date.
+2. Put the same version in `Cargo.toml`.
+3. Run `cargo publish` from that commit.
+4. Tag the commit `v<version>` and push the tag.
+
+The tag does the rest. It runs the gate once more, builds one archive for each
+platform (Linux x86_64 and aarch64, macOS x86_64 and aarch64, Windows x86_64),
+and attaches every archive with its `.sha256` file to a GitHub release.
+
 ## Layout
 
 | Path                            | Holds                                                                                      |

@@ -1,35 +1,173 @@
 name: check
 
+# One gate for a pull request and for `main`, one build for a tag.
+#
+# The build jobs sit in this file rather than in a release file because a job
+# can only `needs` a job of its own workflow: keeping them together is what
+# makes a tag wait for the tests instead of trusting that `main` was green.
+#
+# Every action is pinned to a commit, with the version in a comment. A tag is a
+# moving pointer in someone else's repository, and the release job runs a
+# third-party action with `contents: write`. Move a pin by hand, on purpose.
+
 on:
   push:
+    branches: [main]
+    tags: ["v*"]
   pull_request:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
 jobs:
-  check:
-    name: fmt, lints and tests
+  fmt:
+    name: formatting
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
         with:
-          components: rustfmt, clippy
-      - uses: Swatinem/rust-cache@v2
+          toolchain: stable
+          components: rustfmt
       - run: cargo fmt --all --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+
+  test:
+    name: lints and tests (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+          components: clippy
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - run: cargo test --locked
 
   minimum-rust:
     name: the declared minimum Rust
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.91.0
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo check --all-targets
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: 1.91.0
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo check --all-targets --locked
 
   policy:
     name: dependency policy
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: EmbarkStudios/cargo-deny-action@81891abc19297b21343b15ef67dc61e4aea74fda # v2.1.4
+
+  package:
+    name: the published package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo publish --dry-run --allow-dirty
+
+  build:
+    name: build (${{ matrix.target }})
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [fmt, test, minimum-rust, policy, package]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - os: macos-latest
+            target: aarch64-apple-darwin
+          - os: macos-latest
+            target: x86_64-apple-darwin
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: dtolnay/rust-toolchain@39008827e6b4319a349e9a42dfc90579dd25f1ca # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        with:
+          key: ${{ matrix.target }}
+      - run: cargo build --release --locked --target ${{ matrix.target }}
+
+      # Run the binary that will be uploaded, then archive it. Every runner is
+      # native for its target, so the file that answers is the file that ships.
+      - name: Prove the binary runs, then archive it
+        shell: bash
+        run: |
+          set -euo pipefail
+          suffix=""
+          if [ "${RUNNER_OS}" = "Windows" ]; then suffix=".exe"; fi
+          version="${GITHUB_REF_NAME#v}"
+          name="reposerve-${version}-${{ matrix.target }}"
+          binary="target/${{ matrix.target }}/release/reposerve${suffix}"
+
+          "$binary" --version
+
+          "$binary" -r showcase -p 8930 -b 127.0.0.1 &
+          server=$!
+          ready=""
+          for _ in $(seq 1 40); do
+            if curl -fsS -o /dev/null http://127.0.0.1:8930/; then ready="yes"; break; fi
+            sleep 0.25
+          done
+          kill "$server" || true
+          if [ -z "$ready" ]; then
+            echo "the server did not answer on 127.0.0.1:8930" >&2
+            exit 1
+          fi
+
+          mkdir -p dist
+          cp "$binary" "dist/reposerve${suffix}"
+          tar -czf "dist/${name}.tar.gz" -C dist "reposerve${suffix}"
+          rm "dist/reposerve${suffix}"
+          # The checksum file holds the bare file name, so `sha256sum -c` works
+          # in the directory a reader downloads into.
+          ( cd dist && sha256sum "${name}.tar.gz" > "${name}.tar.gz.sha256" )
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    name: attach the binaries
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          files: dist/*
+          generate_release_notes: true
